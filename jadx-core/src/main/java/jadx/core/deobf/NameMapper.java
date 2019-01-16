@@ -5,6 +5,8 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+import static jadx.core.utils.StringUtils.notEmpty;
+
 public class NameMapper {
 
 	private static final Pattern VALID_JAVA_IDENTIFIER = Pattern.compile(
@@ -13,8 +15,8 @@ public class NameMapper {
 	private static final Pattern VALID_JAVA_FULL_IDENTIFIER = Pattern.compile(
 			"(" + VALID_JAVA_IDENTIFIER + "\\.)*" + VALID_JAVA_IDENTIFIER);
 
-	private static final Set<String> RESERVED_NAMES = new HashSet<String>(
-			Arrays.asList(new String[]{
+	private static final Set<String> RESERVED_NAMES = new HashSet<>(
+			Arrays.asList(
 					"abstract",
 					"assert",
 					"boolean",
@@ -67,8 +69,8 @@ public class NameMapper {
 					"try",
 					"void",
 					"volatile",
-					"while",
-			})
+					"while"
+			)
 	);
 
 	public static boolean isReserved(String str) {
@@ -76,11 +78,17 @@ public class NameMapper {
 	}
 
 	public static boolean isValidIdentifier(String str) {
-		return VALID_JAVA_IDENTIFIER.matcher(str).matches() && isAllCharsPrintable(str);
+		return notEmpty(str)
+				&& !isReserved(str)
+				&& VALID_JAVA_IDENTIFIER.matcher(str).matches()
+				&& isAllCharsPrintable(str);
 	}
 
 	public static boolean isValidFullIdentifier(String str) {
-		return VALID_JAVA_FULL_IDENTIFIER.matcher(str).matches() && isAllCharsPrintable(str);
+		return notEmpty(str)
+				&& !isReserved(str)
+				&& VALID_JAVA_FULL_IDENTIFIER.matcher(str).matches()
+				&& isAllCharsPrintable(str);
 	}
 
 	public static boolean isPrintableChar(int c) {
@@ -95,5 +103,8 @@ public class NameMapper {
 			}
 		}
 		return true;
+	}
+
+	private NameMapper() {
 	}
 }

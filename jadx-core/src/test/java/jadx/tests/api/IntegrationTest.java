@@ -1,5 +1,19 @@
 package jadx.tests.api;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.jar.JarOutputStream;
+
 import jadx.api.JadxArgs;
 import jadx.api.JadxDecompiler;
 import jadx.api.JadxInternalAccess;
@@ -13,29 +27,14 @@ import jadx.core.dex.nodes.MethodNode;
 import jadx.core.dex.nodes.RootNode;
 import jadx.core.dex.visitors.DepthTraversal;
 import jadx.core.dex.visitors.IDexTreeVisitor;
-import jadx.core.utils.exceptions.CodegenException;
 import jadx.core.utils.exceptions.JadxException;
+import jadx.core.xmlgen.ResourceStorage;
+import jadx.core.xmlgen.entry.ResourceEntry;
 import jadx.tests.api.compiler.DynamicCompiler;
 import jadx.tests.api.compiler.StaticCompiler;
 import jadx.tests.api.utils.TestUtils;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.jar.JarOutputStream;
-
 import static jadx.core.utils.files.FileUtils.addFileToJar;
-import static jadx.core.utils.files.FileUtils.close;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.is;
@@ -51,7 +50,15 @@ public abstract class IntegrationTest extends TestUtils {
 	private static final String TEST_DIRECTORY = "src/test/java";
 	private static final String TEST_DIRECTORY2 = "jadx-core/" + TEST_DIRECTORY;
 
-	private JadxArgs args;
+	/**
+	 * Run auto check method if defined:
+	 * <pre>
+	 *     public static void check()
+	 * </pre>
+	 */
+	public static final String CHECK_METHOD_NAME = "check";
+
+	protected JadxArgs args;
 
 	protected boolean deleteTmpFiles = true;
 	protected boolean withDebugInfo = true;
@@ -66,6 +73,7 @@ public abstract class IntegrationTest extends TestUtils {
 
 	public IntegrationTest() {
 		args = new JadxArgs();
+		args.setOutDir(new File(outDir));
 		args.setShowInconsistentCode(true);
 		args.setThreadsCount(1);
 		args.setSkipResources(true);
@@ -83,15 +91,17 @@ public abstract class IntegrationTest extends TestUtils {
 	}
 
 	public ClassNode getClassNodeFromFile(File file, String clsName) {
-		JadxDecompiler d = new JadxDecompiler(args);
+		JadxDecompiler d = null;
 		try {
-			d.loadFile(file);
-		} catch (JadxException e) {
+			args.setInputFiles(Collections.singletonList(file));
+			d = new JadxDecompiler(args);
+			d.load();
+		} catch (Exception e) {
 			e.printStackTrace();
 			fail(e.getMessage());
 		}
 		RootNode root = JadxInternalAccess.getRoot(d);
-		root.getConstValues().getResourcesNames().putAll(resMap);
+		insertResources(root);
 
 		ClassNode cls = root.searchClassByName(clsName);
 		assertThat("Class not found: " + clsName, cls, notNullValue());
@@ -113,27 +123,59 @@ public abstract class IntegrationTest extends TestUtils {
 		return cls;
 	}
 
-	private void decompile(JadxDecompiler jadx, ClassNode cls) {
-		List<IDexTreeVisitor> passes = Jadx.getPassesList(jadx.getArgs(), new File(outDir));
-		ProcessClass.process(cls, passes, new CodeGen(jadx.getArgs()));
+	private void insertResources(RootNode root) {
+		if (resMap.isEmpty()) {
+			return;
+		}
+		ResourceStorage resStorage = new ResourceStorage();
+		for (Map.Entry<Integer, String> entry : resMap.entrySet()) {
+			Integer id = entry.getKey();
+			String name = entry.getValue();
+			String[] parts = name.split("\\.");
+			resStorage.add(new ResourceEntry(id, "", parts[0], parts[1]));
+		}
+		root.processResources(resStorage);
 	}
 
-	private void decompileWithoutUnload(JadxDecompiler d, ClassNode cls) {
+	protected void decompile(JadxDecompiler jadx, ClassNode cls) {
+		List<IDexTreeVisitor> passes = getPassesList(jadx);
+		ProcessClass.process(cls, passes, new CodeGen());
+	}
+
+	protected void decompileWithoutUnload(JadxDecompiler jadx, ClassNode cls) {
 		cls.load();
-		List<IDexTreeVisitor> passes = Jadx.getPassesList(d.getArgs(), new File(outDir));
+		List<IDexTreeVisitor> passes = getPassesList(jadx);
 		for (IDexTreeVisitor visitor : passes) {
 			DepthTraversal.visit(visitor, cls);
 		}
-		try {
-			new CodeGen(d.getArgs()).visit(cls);
-		} catch (CodegenException e) {
-			e.printStackTrace();
-			fail(e.getMessage());
-		}
+		generateClsCode(cls);
 		// don't unload class
 	}
 
-	private static void checkCode(ClassNode cls) {
+	private List<IDexTreeVisitor> getPassesList(JadxDecompiler jadx) {
+		RootNode root = JadxInternalAccess.getRoot(jadx);
+		List<IDexTreeVisitor> passesList = Jadx.getPassesList(jadx.getArgs());
+		passesList.forEach(pass -> {
+			try {
+				pass.init(root);
+			} catch (JadxException e) {
+				e.printStackTrace();
+				fail(e.getMessage());
+			}
+		});
+		return passesList;
+	}
+
+	protected void generateClsCode(ClassNode cls) {
+		try {
+			new CodeGen().visit(cls);
+		} catch (Exception e) {
+			e.printStackTrace();
+			fail(e.getMessage());
+		}
+	}
+
+	protected static void checkCode(ClassNode cls) {
 		assertTrue("Inconsistent cls: " + cls,
 				!cls.contains(AFlag.INCONSISTENT_CODE) && !cls.contains(AType.JADX_ERROR));
 		for (MethodNode mthNode : cls.getMethods()) {
@@ -155,7 +197,7 @@ public abstract class IntegrationTest extends TestUtils {
 			}
 			Method checkMth;
 			try {
-				checkMth = origCls.getMethod("check");
+				checkMth = origCls.getMethod(CHECK_METHOD_NAME);
 			} catch (NoSuchMethodException e) {
 				// ignore
 				return;
@@ -169,7 +211,7 @@ public abstract class IntegrationTest extends TestUtils {
 			try {
 				checkMth.invoke(origCls.newInstance());
 			} catch (InvocationTargetException ie) {
-				rethrow("Java check failed", ie);
+				rethrow("Original check failed", ie);
 			}
 			// run 'check' method from decompiled class
 			try {
@@ -260,11 +302,11 @@ public abstract class IntegrationTest extends TestUtils {
 		assertThat("File list is empty", list, not(empty()));
 
 		File temp = createTempFile(".jar");
-		JarOutputStream jo = new JarOutputStream(new FileOutputStream(temp));
-		for (File file : list) {
-			addFileToJar(jo, file, path + "/" + file.getName());
+		try (JarOutputStream jo = new JarOutputStream(new FileOutputStream(temp))) {
+			for (File file : list) {
+				addFileToJar(jo, file, path + "/" + file.getName());
+			}
 		}
-		close(jo);
 		return temp;
 	}
 
@@ -296,7 +338,7 @@ public abstract class IntegrationTest extends TestUtils {
 	}
 
 	private List<File> getClassFilesWithInners(Class<?> cls) {
-		List<File> list = new ArrayList<File>();
+		List<File> list = new ArrayList<>();
 		String pkgName = cls.getPackage().getName();
 		URL pkgResource = ClassLoader.getSystemClassLoader().getResource(pkgName.replace('.', '/'));
 		if (pkgResource != null) {
@@ -335,13 +377,7 @@ public abstract class IntegrationTest extends TestUtils {
 		outTmp.deleteOnExit();
 		List<File> files = StaticCompiler.compile(compileFileList, outTmp, withDebugInfo);
 		// remove classes which are parents for test class
-		Iterator<File> iterator = files.iterator();
-		while (iterator.hasNext()) {
-			File next = iterator.next();
-			if (!next.getName().contains(cls.getSimpleName())) {
-				iterator.remove();
-			}
-		}
+		files.removeIf(next -> !next.getName().contains(cls.getSimpleName()));
 		for (File clsFile : files) {
 			clsFile.deleteOnExit();
 		}
@@ -374,6 +410,13 @@ public abstract class IntegrationTest extends TestUtils {
 
 	protected void dontUnloadClass() {
 		this.unloadCls = false;
+	}
+
+	protected void enableDeobfuscation() {
+		args.setDeobfuscationOn(true);
+		args.setDeobfuscationForceSave(true);
+		args.setDeobfuscationMinLength(2);
+		args.setDeobfuscationMaxLength(64);
 	}
 
 	// Use only for debug purpose

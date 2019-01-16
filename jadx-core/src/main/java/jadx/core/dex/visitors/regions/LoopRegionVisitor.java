@@ -1,5 +1,11 @@
 package jadx.core.dex.visitors.regions;
 
+import java.util.LinkedList;
+import java.util.List;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import jadx.core.dex.attributes.AFlag;
 import jadx.core.dex.info.MethodInfo;
 import jadx.core.dex.instructions.ArithNode;
@@ -31,12 +37,6 @@ import jadx.core.dex.visitors.CodeShrinker;
 import jadx.core.utils.BlockUtils;
 import jadx.core.utils.InstructionRemover;
 import jadx.core.utils.RegionUtils;
-
-import java.util.LinkedList;
-import java.util.List;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class LoopRegionVisitor extends AbstractVisitor implements IRegionVisitor {
 	private static final Logger LOG = LoggerFactory.getLogger(LoopRegionVisitor.class);
@@ -105,7 +105,7 @@ public class LoopRegionVisitor extends AbstractVisitor implements IRegionVisitor
 			return false;
 		}
 		// can't make loop if argument from increment instruction is assign in loop
-		List<RegisterArg> args = new LinkedList<RegisterArg>();
+		List<RegisterArg> args = new LinkedList<>();
 		incrInsn.getRegisterArgs(args);
 		for (RegisterArg iArg : args) {
 			if (assignOnlyInLoop(mth, loopRegion, iArg)) {
@@ -126,7 +126,7 @@ public class LoopRegionVisitor extends AbstractVisitor implements IRegionVisitor
 	}
 
 	private static LoopType checkArrayForEach(MethodNode mth, InsnNode initInsn, InsnNode incrInsn,
-			IfCondition condition) {
+	                                          IfCondition condition) {
 		if (!(incrInsn instanceof ArithNode)) {
 			return null;
 		}
@@ -230,7 +230,7 @@ public class LoopRegionVisitor extends AbstractVisitor implements IRegionVisitor
 				|| !checkInvoke(nextCall, "java.util.Iterator", "next()Ljava/lang/Object;", 0)) {
 			return false;
 		}
-		List<InsnNode> toSkip = new LinkedList<InsnNode>();
+		List<InsnNode> toSkip = new LinkedList<>();
 		RegisterArg iterVar = nextCall.getResult();
 		if (iterVar == null) {
 			return false;

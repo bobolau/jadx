@@ -1,9 +1,5 @@
 package jadx.core.deobf;
 
-import jadx.core.dex.info.ClassInfo;
-import jadx.core.dex.info.FieldInfo;
-import jadx.core.dex.info.MethodInfo;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -16,6 +12,10 @@ import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import jadx.core.dex.info.ClassInfo;
+import jadx.core.dex.info.FieldInfo;
+import jadx.core.dex.info.MethodInfo;
+
 class DeobfPresets {
 	private static final Logger LOG = LoggerFactory.getLogger(DeobfPresets.class);
 
@@ -24,9 +24,9 @@ class DeobfPresets {
 	private final Deobfuscator deobfuscator;
 	private final File deobfMapFile;
 
-	private final Map<String, String> clsPresetMap = new HashMap<String, String>();
-	private final Map<String, String> fldPresetMap = new HashMap<String, String>();
-	private final Map<String, String> mthPresetMap = new HashMap<String, String>();
+	private final Map<String, String> clsPresetMap = new HashMap<>();
+	private final Map<String, String> fldPresetMap = new HashMap<>();
+	private final Map<String, String> mthPresetMap = new HashMap<>();
 
 	public DeobfPresets(Deobfuscator deobfuscator, File deobfMapFile) {
 		this.deobfuscator = deobfuscator;
@@ -98,7 +98,7 @@ class DeobfPresets {
 	 * Saves DefaultDeobfuscator presets
 	 */
 	private void dumpMapping() throws IOException {
-		List<String> list = new ArrayList<String>();
+		List<String> list = new ArrayList<>();
 		// packages
 		for (PackageNode p : deobfuscator.getRootPackage().getInnerPackages()) {
 			for (PackageNode pp : p.getInnerPackages()) {
@@ -112,18 +112,20 @@ class DeobfPresets {
 		for (DeobfClsInfo deobfClsInfo : deobfuscator.getClsMap().values()) {
 			if (deobfClsInfo.getAlias() != null) {
 				list.add(String.format("c %s = %s",
-						deobfClsInfo.getCls().getClassInfo().getFullName(), deobfClsInfo.getAlias()));
+						deobfClsInfo.getCls().getClassInfo().makeRawFullName(), deobfClsInfo.getAlias()));
 			}
 		}
 		for (FieldInfo fld : deobfuscator.getFldMap().keySet()) {
-			list.add(String.format("f %s = %s", fld.getFullId(), fld.getAlias()));
+			list.add(String.format("f %s = %s", fld.getRawFullId(), fld.getAlias()));
 		}
 		for (MethodInfo mth : deobfuscator.getMthMap().keySet()) {
-			list.add(String.format("m %s = %s", mth.getFullId(), mth.getAlias()));
+			list.add(String.format("m %s = %s", mth.getRawFullId(), mth.getAlias()));
 		}
 		Collections.sort(list);
 		FileUtils.writeLines(deobfMapFile, MAP_FILE_CHARSET, list);
-		list.clear();
+		if (LOG.isDebugEnabled()) {
+			LOG.debug("Deobfuscation map file saved as: {}", deobfMapFile);
+		}
 	}
 
 	private static void dfsPackageName(List<String> list, String prefix, PackageNode node) {
@@ -136,15 +138,15 @@ class DeobfPresets {
 	}
 
 	public String getForCls(ClassInfo cls) {
-		return clsPresetMap.get(cls.getFullName());
+		return clsPresetMap.get(cls.makeRawFullName());
 	}
 
 	public String getForFld(FieldInfo fld) {
-		return fldPresetMap.get(fld.getFullId());
+		return fldPresetMap.get(fld.getRawFullId());
 	}
 
 	public String getForMth(MethodInfo mth) {
-		return mthPresetMap.get(mth.getFullId());
+		return mthPresetMap.get(mth.getRawFullId());
 	}
 
 	public void clear() {

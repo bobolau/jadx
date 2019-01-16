@@ -1,14 +1,14 @@
 package jadx.core.dex.info;
 
-import jadx.core.codegen.TypeGen;
-import jadx.core.dex.instructions.args.ArgType;
-import jadx.core.dex.nodes.DexNode;
-import jadx.core.utils.Utils;
-
 import java.util.List;
 
 import com.android.dex.MethodId;
 import com.android.dex.ProtoId;
+
+import jadx.core.codegen.TypeGen;
+import jadx.core.dex.instructions.args.ArgType;
+import jadx.core.dex.nodes.DexNode;
+import jadx.core.utils.Utils;
 
 public final class MethodInfo {
 
@@ -34,12 +34,12 @@ public final class MethodInfo {
 	}
 
 	public static MethodInfo fromDex(DexNode dex, int mthIndex) {
-		MethodInfo mth = dex.getInfoStorage().getMethod(mthIndex);
+		MethodInfo mth = dex.root().getInfoStorage().getMethod(dex, mthIndex);
 		if (mth != null) {
 			return mth;
 		}
 		mth = new MethodInfo(dex, mthIndex);
-		return dex.getInfoStorage().putMethod(mthIndex, mth);
+		return dex.root().getInfoStorage().putMethod(dex, mthIndex, mth);
 	}
 
 	public String makeSignature(boolean includeRetType) {
@@ -66,6 +66,10 @@ public final class MethodInfo {
 
 	public String getFullId() {
 		return declClass.getFullName() + "." + shortId;
+	}
+
+	public String getRawFullId() {
+		return declClass.makeRawFullName() + "." + shortId;
 	}
 
 	/**
@@ -146,5 +150,4 @@ public final class MethodInfo {
 		return declClass.getFullName() + "." + name
 				+ "(" + Utils.listToString(args) + "):" + retType;
 	}
-
 }

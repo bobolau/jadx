@@ -1,16 +1,20 @@
 package jadx.core.dex.visitors.typeinference;
 
+import java.util.List;
+
+import jadx.core.dex.attributes.AType;
+import jadx.core.dex.attributes.nodes.PhiListAttr;
 import jadx.core.dex.instructions.PhiInsn;
 import jadx.core.dex.instructions.args.ArgType;
 import jadx.core.dex.instructions.args.InsnArg;
 import jadx.core.dex.instructions.args.RegisterArg;
 import jadx.core.dex.instructions.args.SSAVar;
+import jadx.core.dex.instructions.args.VarName;
+import jadx.core.dex.nodes.BlockNode;
 import jadx.core.dex.nodes.DexNode;
 import jadx.core.dex.nodes.MethodNode;
 import jadx.core.dex.visitors.AbstractVisitor;
 import jadx.core.utils.exceptions.JadxException;
-
-import java.util.List;
 
 public class TypeInference extends AbstractVisitor {
 
@@ -19,6 +23,8 @@ public class TypeInference extends AbstractVisitor {
 		if (mth.isNoCode()) {
 			return;
 		}
+		fixPhiVarNames(mth);
+
 		DexNode dex = mth.dex();
 		for (SSAVar var : mth.getSVars()) {
 			// inference variable type
@@ -50,11 +56,13 @@ public class TypeInference extends AbstractVisitor {
 		}
 		ArgType type = assign.getType();
 		for (RegisterArg arg : useList) {
-			ArgType useType = arg.getType();
-			ArgType newType = ArgType.merge(dex, type, useType);
-			if (newType != null) {
-				type = newType;
-			}
+		    ArgType useType = arg.getType();
+            if (!type.isTypeKnown() || !useType.isTypeKnown()) {
+                ArgType newType = ArgType.merge(dex, type, useType);
+                if (newType != null) {
+                    type = newType;
+                }
+            }
 		}
 		return type;
 	}
@@ -76,6 +84,32 @@ public class TypeInference extends AbstractVisitor {
 			SSAVar sVar = arg.getSVar();
 			if (sVar != null) {
 				sVar.setName(phi.getResult().getName());
+			}
+		}
+	}
+
+	private static void fixPhiVarNames(MethodNode mth) {
+		for (BlockNode block : mth.getBasicBlocks()) {
+			PhiListAttr phiList = block.get(AType.PHI_LIST);
+			if (phiList == null) {
+				continue;
+			}
+			for (PhiInsn phiInsn : phiList.getList()) {
+				RegisterArg resArg = phiInsn.getResult();
+				int argsCount = phiInsn.getArgsCount();
+				for (int i = 0; i < argsCount; i++) {
+					RegisterArg arg = phiInsn.getArg(i);
+					arg.mergeName(resArg);
+				}
+				VarName varName = resArg.getSVar().getVarName();
+				if (varName == null) {
+					varName = new VarName();
+					resArg.getSVar().setVarName(varName);
+				}
+				for (int i = 0; i < argsCount; i++) {
+					RegisterArg arg = phiInsn.getArg(i);
+					arg.getSVar().setVarName(varName);
+				}
 			}
 		}
 	}

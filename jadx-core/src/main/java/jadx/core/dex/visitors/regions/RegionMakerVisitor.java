@@ -1,5 +1,14 @@
 package jadx.core.dex.visitors.regions;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import jadx.core.dex.attributes.AFlag;
 import jadx.core.dex.attributes.AType;
 import jadx.core.dex.attributes.nodes.EdgeInsnAttr;
@@ -19,15 +28,6 @@ import jadx.core.dex.visitors.AbstractVisitor;
 import jadx.core.utils.InstructionRemover;
 import jadx.core.utils.RegionUtils;
 import jadx.core.utils.exceptions.JadxException;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Pack blocks into regions for code generation
@@ -113,7 +113,7 @@ public class RegionMakerVisitor extends AbstractVisitor {
 			if (!(c instanceof Region)) {
 				continue;
 			}
-			Set<IBlock> blocks = new HashSet<IBlock>();
+			Set<IBlock> blocks = new HashSet<>();
 			RegionUtils.getAllRegionBlocks(c, blocks);
 			if (blocks.isEmpty()) {
 				addBreakToContainer((Region) c);
@@ -151,7 +151,7 @@ public class RegionMakerVisitor extends AbstractVisitor {
 		if (RegionUtils.hasExitEdge(c)) {
 			return;
 		}
-		List<InsnNode> insns = new ArrayList<InsnNode>(1);
+		List<InsnNode> insns = new ArrayList<>(1);
 		insns.add(new InsnNode(InsnType.BREAK, 0));
 		c.add(new InsnContainer(insns));
 	}

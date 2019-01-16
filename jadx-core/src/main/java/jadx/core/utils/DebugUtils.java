@@ -1,5 +1,15 @@
 package jadx.core.utils;
 
+import java.io.File;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
+import org.jetbrains.annotations.TestOnly;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import jadx.core.codegen.CodeWriter;
 import jadx.core.codegen.InsnGen;
 import jadx.core.codegen.MethodGen;
@@ -22,32 +32,27 @@ import jadx.core.dex.visitors.regions.TracedRegionVisitor;
 import jadx.core.utils.exceptions.CodegenException;
 import jadx.core.utils.exceptions.JadxRuntimeException;
 
-import java.io.File;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 @Deprecated
+@TestOnly
 public class DebugUtils {
 	private static final Logger LOG = LoggerFactory.getLogger(DebugUtils.class);
+
+	private DebugUtils() {
+	}
 
 	public static void dump(MethodNode mth) {
 		dump(mth, "");
 	}
 
 	public static void dump(MethodNode mth, String desc) {
-		File out = new File("test-graph" + desc + "-tmp");
-		DotGraphVisitor.dump(out).visit(mth);
-		DotGraphVisitor.dumpRaw(out).visit(mth);
-		DotGraphVisitor.dumpRegions(out).visit(mth);
+		File out = new File("test-graph-" + desc + "-tmp");
+		DotGraphVisitor.dump().save(out, mth);
+		DotGraphVisitor.dumpRaw().save(out, mth);
+		DotGraphVisitor.dumpRegions().save(out, mth);
 	}
 
-	public static void printRegionsWithBlock(MethodNode mth, final BlockNode block) {
-		final Set<IRegion> regions = new LinkedHashSet<IRegion>();
+	public static void printRegionsWithBlock(MethodNode mth, BlockNode block) {
+		Set<IRegion> regions = new LinkedHashSet<>();
 		DepthRegionTraversal.traverse(mth, new TracedRegionVisitor() {
 			@Override
 			public void processBlockTraced(MethodNode mth, IBlock container, IRegion currentRegion) {
@@ -73,7 +78,7 @@ public class DebugUtils {
 	}
 
 	private static void printRegion(MethodNode mth, IRegion region, String indent, boolean printInsns) {
-		LOG.debug("{}{}", indent, region);
+		LOG.debug("{}{} {}", indent, region, region.getAttributesString());
 		indent += "|  ";
 		for (IContainer container : region.getSubBlocks()) {
 			if (container instanceof IRegion) {
@@ -96,9 +101,9 @@ public class DebugUtils {
 				CodeWriter code = new CodeWriter();
 				ig.makeInsn(insn, code);
 				String insnStr = code.toString().substring(CodeWriter.NL.length());
-				LOG.debug("{} - {}", indent, insnStr);
+				LOG.debug("{}> {}\t{}", indent, insnStr, insn.getAttributesString());
 			} catch (CodegenException e) {
-				LOG.debug("{} - {}", indent, insn);
+				LOG.debug("{}>!! {}", indent, insn);
 			}
 		}
 	}
@@ -126,17 +131,15 @@ public class DebugUtils {
 		}
 		for (RegisterArg useArg : sVar.getUseList()) {
 			InsnNode parentInsn = useArg.getParentInsn();
-			if (parentInsn != null) {
-				if (!parentInsn.containsArg(useArg)) {
-					throw new JadxRuntimeException("Incorrect use info in PHI insn");
-				}
+			if (parentInsn != null && !parentInsn.containsArg(useArg)) {
+				throw new JadxRuntimeException("Incorrect use info in PHI insn");
 			}
 		}
 	}
 
 	private static void checkPHI(MethodNode mth) {
 		for (BlockNode block : mth.getBasicBlocks()) {
-			List<PhiInsn> phis = new ArrayList<PhiInsn>();
+			List<PhiInsn> phis = new ArrayList<>();
 			for (InsnNode insn : block.getInstructions()) {
 				if (insn.getType() == InsnType.PHI) {
 					PhiInsn phi = (PhiInsn) insn;

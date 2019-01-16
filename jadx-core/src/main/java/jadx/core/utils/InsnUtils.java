@@ -1,5 +1,10 @@
 package jadx.core.utils;
 
+import com.android.dx.io.instructions.DecodedInstruction;
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import jadx.core.dex.attributes.AType;
 import jadx.core.dex.info.FieldInfo;
 import jadx.core.dex.instructions.ConstClassNode;
@@ -11,12 +16,6 @@ import jadx.core.dex.nodes.FieldNode;
 import jadx.core.dex.nodes.InsnNode;
 import jadx.core.dex.nodes.parser.FieldInitAttr;
 import jadx.core.utils.exceptions.JadxRuntimeException;
-
-import org.jetbrains.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.android.dx.io.instructions.DecodedInstruction;
 
 public class InsnUtils {
 
@@ -37,20 +36,20 @@ public class InsnUtils {
 				return insn.getD();
 			case 4:
 				return insn.getE();
+			default:
+				throw new JadxRuntimeException("Wrong argument number: " + arg);
 		}
-		throw new JadxRuntimeException("Wrong argument number: " + arg);
 	}
 
 	public static String formatOffset(int offset) {
 		if (offset < 0) {
 			return "?";
-		} else {
-			return String.format("0x%04x", offset);
 		}
+		return String.format("0x%04x", offset);
 	}
 
 	public static String insnTypeToString(InsnType type) {
-		return type.toString() + "  ";
+		return type + "  ";
 	}
 
 	public static String indexToString(Object index) {
@@ -59,9 +58,8 @@ public class InsnUtils {
 		}
 		if (index instanceof String) {
 			return "\"" + index + "\"";
-		} else {
-			return index.toString();
 		}
+		return index.toString();
 	}
 
 	/**
@@ -80,17 +78,16 @@ public class InsnUtils {
 				return ((ConstClassNode) insn).getClsType();
 			case SGET:
 				FieldInfo f = (FieldInfo) ((IndexInsnNode) insn).getIndex();
-				FieldNode fieldNode = dex.resolveField(f);
-				if (fieldNode != null) {
-					FieldInitAttr attr = fieldNode.get(AType.FIELD_INIT);
-					if (attr != null) {
-						return attr.getValue();
-					}
-				} else {
+				FieldNode fieldNode = dex.root().deepResolveField(f);
+				if (fieldNode == null) {
 					LOG.warn("Field {} not found in dex {}", f, dex);
+					return null;
 				}
-				break;
+				FieldInitAttr attr = fieldNode.get(AType.FIELD_INIT);
+				return attr != null ? attr.getValue() : null;
+
+			default:
+				return null;
 		}
-		return null;
 	}
 }

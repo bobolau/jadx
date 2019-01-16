@@ -1,10 +1,5 @@
 package jadx.core.clsp;
 
-import jadx.api.JadxArgs;
-import jadx.core.dex.nodes.RootNode;
-import jadx.core.utils.exceptions.DecodeException;
-import jadx.core.utils.files.InputFile;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -12,6 +7,11 @@ import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import jadx.api.JadxArgs;
+import jadx.core.dex.nodes.RootNode;
+import jadx.core.utils.exceptions.DecodeException;
+import jadx.core.utils.files.InputFile;
 
 /**
  * Utility class for convert dex or jar to jadx classes set (.jcst)
@@ -30,7 +30,7 @@ public class ConvertToClsSet {
 		}
 		File output = new File(args[0]);
 
-		List<InputFile> inputFiles = new ArrayList<InputFile>(args.length - 1);
+		List<InputFile> inputFiles = new ArrayList<>(args.length - 1);
 		for (int i = 1; i < args.length; i++) {
 			File f = new File(args[i]);
 			if (f.isDirectory()) {

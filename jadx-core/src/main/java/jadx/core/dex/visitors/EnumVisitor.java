@@ -1,5 +1,10 @@
 package jadx.core.dex.visitors;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import org.jetbrains.annotations.Nullable;
+
 import jadx.core.codegen.TypeGen;
 import jadx.core.deobf.NameMapper;
 import jadx.core.dex.attributes.AFlag;
@@ -13,6 +18,7 @@ import jadx.core.dex.instructions.InsnType;
 import jadx.core.dex.instructions.args.ArgType;
 import jadx.core.dex.instructions.args.InsnArg;
 import jadx.core.dex.instructions.args.InsnWrapArg;
+import jadx.core.dex.instructions.args.RegisterArg;
 import jadx.core.dex.instructions.mods.ConstructorInsn;
 import jadx.core.dex.nodes.BlockNode;
 import jadx.core.dex.nodes.ClassNode;
@@ -24,19 +30,12 @@ import jadx.core.utils.ErrorsCounter;
 import jadx.core.utils.InsnUtils;
 import jadx.core.utils.exceptions.JadxException;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 @JadxVisitor(
 		name = "EnumVisitor",
 		desc = "Restore enum classes",
 		runAfter = {CodeShrinker.class, ModVisitor.class}
 )
 public class EnumVisitor extends AbstractVisitor {
-	private static final Logger LOG = LoggerFactory.getLogger(EnumVisitor.class);
 
 	@Override
 	public boolean visit(ClassNode cls) throws JadxException {
@@ -53,7 +52,7 @@ public class EnumVisitor extends AbstractVisitor {
 			}
 		}
 		if (staticMethod == null) {
-			ErrorsCounter.classError(cls, "Enum class init method not found");
+			ErrorsCounter.classWarn(cls, "Enum class init method not found");
 			return true;
 		}
 
@@ -64,7 +63,7 @@ public class EnumVisitor extends AbstractVisitor {
 		String valuesMethod = "values()" + TypeGen.signature(ArgType.array(clsType));
 
 		// collect enum fields, remove synthetic
-		List<FieldNode> enumFields = new ArrayList<FieldNode>();
+		List<FieldNode> enumFields = new ArrayList<>();
 		for (FieldNode f : cls.getFields()) {
 			if (f.getAccessFlags().isEnum()) {
 				enumFields.add(f);
@@ -101,7 +100,7 @@ public class EnumVisitor extends AbstractVisitor {
 
 		// move enum specific instruction from static method to separate list
 		BlockNode staticBlock = staticMethod.getBasicBlocks().get(0);
-		List<InsnNode> enumPutInsns = new ArrayList<InsnNode>();
+		List<InsnNode> enumPutInsns = new ArrayList<>();
 		List<InsnNode> list = staticBlock.getInstructions();
 		int size = list.size();
 		for (int i = 0; i < size; i++) {
@@ -178,9 +177,7 @@ public class EnumVisitor extends AbstractVisitor {
 	private boolean isEnumArrayField(ClassInfo classInfo, FieldNode fieldNode) {
 		if (fieldNode.getAccessFlags().isSynthetic()) {
 			ArgType fType = fieldNode.getType();
-			if (fType.isArray() && fType.getArrayRootElement().equals(classInfo.getType())) {
-				return true;
-			}
+			return fType.isArray() && fType.getArrayRootElement().equals(classInfo.getType());
 		}
 		return false;
 	}
@@ -191,10 +188,18 @@ public class EnumVisitor extends AbstractVisitor {
 		}
 		InsnArg arg = putInsn.getArg(0);
 		if (arg.isInsnWrap()) {
-			InsnNode wrapInsn = ((InsnWrapArg) arg).getWrapInsn();
-			if (wrapInsn.getType() == InsnType.CONSTRUCTOR) {
-				return (ConstructorInsn) wrapInsn;
-			}
+			return castConstructorInsn(((InsnWrapArg) arg).getWrapInsn());
+		}
+		if (arg.isRegister()) {
+			return castConstructorInsn(((RegisterArg) arg).getAssignInsn());
+		}
+		return null;
+	}
+
+	@Nullable
+	private ConstructorInsn castConstructorInsn(InsnNode coCandidate) {
+		if (coCandidate != null && coCandidate.getType() == InsnType.CONSTRUCTOR) {
+			return (ConstructorInsn) coCandidate;
 		}
 		return null;
 	}

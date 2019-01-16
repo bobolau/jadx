@@ -1,9 +1,9 @@
 package jadx.core.dex.attributes;
 
-import jadx.core.dex.attributes.annotations.Annotation;
-
 import java.util.Collections;
 import java.util.List;
+
+import jadx.core.dex.attributes.annotations.Annotation;
 
 public final class EmptyAttrStorage extends AttributeStorage {
 
@@ -34,18 +34,22 @@ public final class EmptyAttrStorage extends AttributeStorage {
 
 	@Override
 	public void clear() {
+		// ignore
 	}
 
 	@Override
 	public void remove(AFlag flag) {
+		// ignore
 	}
 
 	@Override
 	public <T extends IAttribute> void remove(AType<T> type) {
+		// ignore
 	}
 
 	@Override
 	public void remove(IAttribute attr) {
+		// ignore
 	}
 
 	@Override

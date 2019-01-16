@@ -1,9 +1,9 @@
 package jadx.tests.integration.loops;
 
+import org.junit.Test;
+
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
-
-import org.junit.Test;
 
 import static jadx.tests.api.utils.JadxMatchers.containsOne;
 import static org.junit.Assert.assertThat;
@@ -37,7 +37,7 @@ public class TestLoopConditionInvoke extends IntegrationTest {
 		String code = cls.getCode().toString();
 
 		assertThat(code, containsOne("do {"));
-		assertThat(code, containsOne("if (ch == '\\u0000') {"));
+		assertThat(code, containsOne("if (ch == 0) {"));
 		assertThat(code, containsOne("this.pos = startPos;"));
 		assertThat(code, containsOne("return false;"));
 		assertThat(code, containsOne("} while (ch != lastChar);"));

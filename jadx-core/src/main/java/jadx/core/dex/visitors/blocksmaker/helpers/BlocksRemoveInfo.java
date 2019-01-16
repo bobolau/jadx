@@ -1,8 +1,5 @@
 package jadx.core.dex.visitors.blocksmaker.helpers;
 
-import jadx.core.dex.instructions.args.RegisterArg;
-import jadx.core.dex.nodes.BlockNode;
-
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -10,10 +7,13 @@ import java.util.Set;
 
 import org.jetbrains.annotations.Nullable;
 
+import jadx.core.dex.instructions.args.RegisterArg;
+import jadx.core.dex.nodes.BlockNode;
+
 public final class BlocksRemoveInfo {
-	private final Set<BlocksPair> processed = new HashSet<BlocksPair>();
-	private final Set<BlocksPair> outs = new HashSet<BlocksPair>();
-	private final Map<RegisterArg, RegisterArg> regMap = new HashMap<RegisterArg, RegisterArg>();
+	private final Set<BlocksPair> processed = new HashSet<>();
+	private final Set<BlocksPair> outs = new HashSet<>();
+	private final Map<RegisterArg, RegisterArg> regMap = new HashMap<>();
 
 	private BlocksPair start;
 	private BlocksPair end;
@@ -22,6 +22,8 @@ public final class BlocksRemoveInfo {
 	private int endSplitIndex;
 
 	private BlockNode startPredecessor;
+
+	private boolean applied;
 
 	public BlocksRemoveInfo(BlocksPair start) {
 		this.start = start;
@@ -99,13 +101,22 @@ public final class BlocksRemoveInfo {
 		return null;
 	}
 
+	public boolean isApplied() {
+		return applied;
+	}
+
+	public void setApplied(boolean applied) {
+		this.applied = applied;
+	}
+
 	@Override
 	public String toString() {
-		return "BRI start: " + start
+		return "BRI{start: " + start
 				+ ", end: " + end
-				+ ", list: " + processed
+				+ ", processed: " + processed
 				+ ", outs: " + outs
 				+ ", regMap: " + regMap
-				+ ", split: " + startSplitIndex;
+				+ ", split: " + startSplitIndex + "-" + endSplitIndex
+				+ "}";
 	}
 }

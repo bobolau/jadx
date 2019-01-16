@@ -1,9 +1,9 @@
 package jadx.tests.integration.conditions;
 
+import org.junit.Test;
+
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
-
-import org.junit.Test;
 
 import static jadx.tests.api.utils.JadxMatchers.containsOne;
 import static org.hamcrest.CoreMatchers.containsString;
@@ -14,7 +14,7 @@ public class TestConditions10 extends IntegrationTest {
 
 	public static class TestCls {
 
-		public void test(boolean a, int b) throws Exception {
+		public void test(boolean a, int b) {
 			if (a || b > 2) {
 				b++;
 			}

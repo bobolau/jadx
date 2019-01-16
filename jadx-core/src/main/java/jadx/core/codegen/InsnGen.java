@@ -1,5 +1,16 @@
 package jadx.core.codegen;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
+
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import jadx.core.dex.attributes.AFlag;
 import jadx.core.dex.attributes.AType;
 import jadx.core.dex.attributes.nodes.FieldReplaceAttr;
@@ -40,17 +51,6 @@ import jadx.core.utils.ErrorsCounter;
 import jadx.core.utils.RegionUtils;
 import jadx.core.utils.exceptions.CodegenException;
 import jadx.core.utils.exceptions.JadxRuntimeException;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.EnumSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
-
-import org.jetbrains.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static jadx.core.utils.android.AndroidResourcesUtils.handleAppResField;
 
@@ -137,13 +137,7 @@ public class InsnGen {
 
 	private void instanceField(CodeWriter code, FieldInfo field, InsnArg arg) throws CodegenException {
 		ClassNode pCls = mth.getParentClass();
-		FieldNode fieldNode = pCls.searchField(field);
-		while (fieldNode == null
-				&& pCls.getParentClass() != pCls
-				&& pCls.getParentClass() != null) {
-			pCls = pCls.getParentClass();
-			fieldNode = pCls.searchField(field);
-		}
+		FieldNode fieldNode = pCls.dex().root().deepResolveField(field);
 		if (fieldNode != null) {
 			FieldReplaceAttr replace = fieldNode.get(AType.FIELD_REPLACE);
 			if (replace != null) {
@@ -163,7 +157,11 @@ public class InsnGen {
 		if (fieldNode != null) {
 			code.attachAnnotation(fieldNode);
 		}
-		code.add(field.getAlias());
+		if (fieldNode == null) {
+			code.add(field.getAlias());
+		} else {
+			code.add(fieldNode.getAlias());
+		}
 	}
 
 	public static void makeStaticFieldAccess(CodeWriter code, FieldInfo field, ClassGen clsGen) {
@@ -176,11 +174,15 @@ public class InsnGen {
 			}
 			code.add('.');
 		}
-		FieldNode fieldNode = clsGen.getClassNode().dex().resolveField(field);
+		FieldNode fieldNode = clsGen.getClassNode().dex().root().deepResolveField(field);
 		if (fieldNode != null) {
 			code.attachAnnotation(fieldNode);
 		}
-		code.add(field.getAlias());
+		if (fieldNode == null) {
+			code.add(field.getAlias());
+		} else {
+			code.add(fieldNode.getAlias());
+		}
 	}
 
 	protected void staticField(CodeWriter code, FieldInfo field) {
@@ -222,7 +224,7 @@ public class InsnGen {
 					code.add(';');
 				}
 			}
-		} catch (Throwable th) {
+		} catch (Exception th) {
 			throw new CodegenException(mth, "Error generate insn: " + insn, th);
 		}
 		return true;
@@ -270,18 +272,13 @@ public class InsnGen {
 				makeArith((ArithNode) insn, code, state);
 				break;
 
-			case NEG: {
-				boolean wrap = state.contains(Flags.BODY_ONLY);
-				if (wrap) {
-					code.add('(');
-				}
-				code.add('-');
-				addArg(code, insn.getArg(0));
-				if (wrap) {
-					code.add(')');
-				}
+			case NEG:
+				oneArgInsn(code, insn, state, '-');
 				break;
-			}
+
+			case NOT:
+				oneArgInsn(code, insn, state, '~');
+				break;
 
 			case RETURN:
 				if (insn.getArgsCount() != 0) {
@@ -525,6 +522,18 @@ public class InsnGen {
 		}
 	}
 
+	private void oneArgInsn(CodeWriter code, InsnNode insn, Set<Flags> state, char op) throws CodegenException {
+		boolean wrap = state.contains(Flags.BODY_ONLY);
+		if (wrap) {
+			code.add('(');
+		}
+		code.add(op);
+		addArg(code, insn.getArg(0));
+		if (wrap) {
+			code.add(')');
+		}
+	}
+
 	private void fallbackOnlyInsn(InsnNode insn) throws CodegenException {
 		if (!fallback) {
 			throw new CodegenException(insn.getType() + " can be used only in fallback mode");
@@ -571,7 +580,7 @@ public class InsnGen {
 		// anonymous class construction
 		if (cls.contains(AFlag.DONT_GENERATE)) {
 			code.add("/* anonymous class already generated */");
-			ErrorsCounter.methodError(mth, "Anonymous class already generated: " + cls);
+			ErrorsCounter.methodWarn(mth, "Anonymous class already generated: " + cls);
 			return;
 		}
 		ArgType parent;
@@ -605,7 +614,7 @@ public class InsnGen {
 		MethodInfo callMth = insn.getCallMth();
 
 		// inline method
-		MethodNode callMthNode = mth.dex().deepResolveMethod(callMth);
+		MethodNode callMthNode = mth.root().deepResolveMethod(callMth);
 		if (callMthNode != null) {
 			if (inlineMethod(callMthNode, insn, code)) {
 				return;
@@ -650,7 +659,7 @@ public class InsnGen {
 	}
 
 	void generateMethodArguments(CodeWriter code, InsnNode insn, int startArgNum,
-			@Nullable MethodNode callMth) throws CodegenException {
+	                             @Nullable MethodNode callMth) throws CodegenException {
 		int k = startArgNum;
 		if (callMth != null && callMth.contains(AFlag.SKIP_FIRST_ARG)) {
 			k++;
@@ -752,7 +761,7 @@ public class InsnGen {
 			}
 			// replace args
 			InsnNode inlCopy = inl.copy();
-			List<RegisterArg> inlArgs = new ArrayList<RegisterArg>();
+			List<RegisterArg> inlArgs = new ArrayList<>();
 			inlCopy.getRegisterArgs(inlArgs);
 			for (RegisterArg r : inlArgs) {
 				int regNum = r.getRegNum();

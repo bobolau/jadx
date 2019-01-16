@@ -1,5 +1,14 @@
 package jadx.core.dex.visitors;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import jadx.core.codegen.TypeGen;
 import jadx.core.deobf.NameMapper;
 import jadx.core.dex.attributes.AFlag;
@@ -36,15 +45,6 @@ import jadx.core.utils.ErrorsCounter;
 import jadx.core.utils.InsnUtils;
 import jadx.core.utils.InstructionRemover;
 import jadx.core.utils.exceptions.JadxRuntimeException;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Visitor for modify method instructions
@@ -134,7 +134,7 @@ public class ModVisitor extends AbstractVisitor {
 						break;
 
 					case MOVE_EXCEPTION:
-						processMoveException(mth, block, insn, remover);
+						processMoveException(block, insn, remover);
 						break;
 
 					case ARITH:
@@ -216,7 +216,7 @@ public class ModVisitor extends AbstractVisitor {
 				RegisterArg resultArg = co.getResult();
 				if (!resultArg.equals(instArg)) {
 					// replace all usages of 'instArg' with result of this constructor instruction
-					for (RegisterArg useArg : new ArrayList<RegisterArg>(instArg.getSVar().getUseList())) {
+					for (RegisterArg useArg : new ArrayList<>(instArg.getSVar().getUseList())) {
 						RegisterArg dup = resultArg.duplicate();
 						InsnNode parentInsn = useArg.getParentInsn();
 						parentInsn.replaceArg(useArg, dup);
@@ -249,14 +249,9 @@ public class ModVisitor extends AbstractVisitor {
 				|| !parentClass.getInnerClasses().contains(classNode)) {
 			return;
 		}
-		if (!classNode.getAccessFlags().isStatic()
-				&& (callMth.getArgsCount() == 0
-				|| !callMth.getArgumentsTypes().get(0).equals(parentClass.getClassInfo().getType()))) {
-			return;
-		}
 		// TODO: calculate this constructor and other constructor usage
 		Map<InsnArg, FieldNode> argsMap = getArgsToFieldsMapping(callMthNode, co);
-		if (argsMap.isEmpty()) {
+		if (argsMap.isEmpty() && !callMthNode.getArguments(true).isEmpty()) {
 			return;
 		}
 
@@ -284,10 +279,15 @@ public class ModVisitor extends AbstractVisitor {
 	}
 
 	private static Map<InsnArg, FieldNode> getArgsToFieldsMapping(MethodNode callMthNode, ConstructorInsn co) {
-		Map<InsnArg, FieldNode> map = new LinkedHashMap<InsnArg, FieldNode>();
-		ClassNode parentClass = callMthNode.getParentClass();
+		Map<InsnArg, FieldNode> map = new LinkedHashMap<>();
+		MethodInfo callMth = callMthNode.getMethodInfo();
+		ClassNode cls = callMthNode.getParentClass();
+		ClassNode parentClass = cls.getParentClass();
 		List<RegisterArg> argList = callMthNode.getArguments(false);
-		int startArg = parentClass.getAccessFlags().isStatic() ? 0 : 1;
+		int startArg = 0;
+		if (callMth.getArgsCount() != 0 && callMth.getArgumentsTypes().get(0).equals(parentClass.getClassInfo().getType())) {
+			startArg = 1;
+		}
 		int argsCount = argList.size();
 		for (int i = startArg; i < argsCount; i++) {
 			RegisterArg arg = argList.get(i);
@@ -298,7 +298,7 @@ public class ModVisitor extends AbstractVisitor {
 			FieldNode fieldNode = null;
 			if (useInsn.getType() == InsnType.IPUT) {
 				FieldInfo field = (FieldInfo) ((IndexInsnNode) useInsn).getIndex();
-				fieldNode = parentClass.searchField(field);
+				fieldNode = cls.searchField(field);
 				if (fieldNode == null || !fieldNode.getAccessFlags().isSynthetic()) {
 					return Collections.emptyMap();
 				}
@@ -360,13 +360,13 @@ public class ModVisitor extends AbstractVisitor {
 		ArgType insnArrayType = insn.getResult().getType();
 		ArgType insnElementType = insnArrayType.getArrayElement();
 		ArgType elType = insn.getElementType();
-		if (!elType.isTypeKnown() && insnElementType.isPrimitive()) {
-			if (elType.contains(insnElementType.getPrimitiveType())) {
-				elType = insnElementType;
-			}
+		if (!elType.isTypeKnown()
+				&& insnElementType.isPrimitive()
+				&& elType.contains(insnElementType.getPrimitiveType())) {
+			elType = insnElementType;
 		}
 		if (!elType.equals(insnElementType) && !insnArrayType.equals(ArgType.OBJECT)) {
-			ErrorsCounter.methodError(mth,
+			ErrorsCounter.methodWarn(mth,
 					"Incorrect type for fill-array insn " + InsnUtils.formatOffset(insn.getOffset())
 							+ ", element type: " + elType + ", insn element type: " + insnElementType
 			);
@@ -396,14 +396,14 @@ public class ModVisitor extends AbstractVisitor {
 		return filledArr;
 	}
 
-	private static boolean allArgsNull(InsnNode insn) {
+	private static boolean allArgsNull(ConstructorInsn insn) {
 		for (InsnArg insnArg : insn.getArguments()) {
 			if (insnArg.isLiteral()) {
 				LiteralArg lit = (LiteralArg) insnArg;
 				if (lit.getLiteral() != 0) {
 					return false;
 				}
-			} else if (!insnArg.isThis()) {
+			} else {
 				return false;
 			}
 		}
@@ -429,8 +429,7 @@ public class ModVisitor extends AbstractVisitor {
 		return null;
 	}
 
-	private static void processMoveException(MethodNode mth, BlockNode block, InsnNode insn,
-			InstructionRemover remover) {
+	private static void processMoveException(BlockNode block, InsnNode insn, InstructionRemover remover) {
 		ExcHandlerAttr excHandlerAttr = block.get(AType.EXC_HANDLER);
 		if (excHandlerAttr == null) {
 			return;

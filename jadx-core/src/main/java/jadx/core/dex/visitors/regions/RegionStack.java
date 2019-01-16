@@ -1,10 +1,5 @@
 package jadx.core.dex.visitors.regions;
 
-import jadx.core.dex.nodes.BlockNode;
-import jadx.core.dex.nodes.IRegion;
-import jadx.core.dex.nodes.MethodNode;
-import jadx.core.utils.exceptions.JadxOverflowException;
-
 import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.Deque;
@@ -13,6 +8,11 @@ import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import jadx.core.dex.nodes.BlockNode;
+import jadx.core.dex.nodes.IRegion;
+import jadx.core.dex.nodes.MethodNode;
+import jadx.core.utils.exceptions.JadxOverflowException;
 
 final class RegionStack {
 	private static final Logger LOG = LoggerFactory.getLogger(RegionStack.class);
@@ -31,11 +31,11 @@ final class RegionStack {
 		IRegion region;
 
 		public State() {
-			exits = new HashSet<BlockNode>(4);
+			exits = new HashSet<>(4);
 		}
 
 		private State(State c) {
-			exits = new HashSet<BlockNode>(c.exits);
+			exits = new HashSet<>(c.exits);
 		}
 
 		public State copy() {
@@ -55,7 +55,7 @@ final class RegionStack {
 		if (DEBUG) {
 			LOG.debug("New RegionStack: {}", mth);
 		}
-		this.stack = new ArrayDeque<State>();
+		this.stack = new ArrayDeque<>();
 		this.curState = new State();
 	}
 

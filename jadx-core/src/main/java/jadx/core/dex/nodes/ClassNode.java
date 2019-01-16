@@ -1,9 +1,25 @@
 package jadx.core.dex.nodes;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import com.android.dex.ClassData;
+import com.android.dex.ClassData.Field;
+import com.android.dex.ClassData.Method;
+import com.android.dex.ClassDef;
+import com.android.dex.Dex;
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import jadx.core.Consts;
 import jadx.core.codegen.CodeWriter;
 import jadx.core.dex.attributes.annotations.Annotation;
-import jadx.core.dex.attributes.nodes.JadxErrorAttr;
 import jadx.core.dex.attributes.nodes.LineAttrNode;
 import jadx.core.dex.attributes.nodes.SourceFileAttr;
 import jadx.core.dex.info.AccessInfo;
@@ -20,25 +36,7 @@ import jadx.core.dex.nodes.parser.StaticValuesParser;
 import jadx.core.utils.exceptions.DecodeException;
 import jadx.core.utils.exceptions.JadxRuntimeException;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.TestOnly;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.android.dex.ClassData;
-import com.android.dex.ClassData.Field;
-import com.android.dex.ClassData.Method;
-import com.android.dex.ClassDef;
-import com.android.dex.Dex;
-import com.android.dx.rop.code.AccessFlags;
+import static jadx.core.dex.nodes.ProcessState.UNLOADED;
 
 public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 	private static final Logger LOG = LoggerFactory.getLogger(ClassNode.class);
@@ -52,7 +50,7 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 
 	private final List<MethodNode> methods;
 	private final List<FieldNode> fields;
-	private List<ClassNode> innerClasses = Collections.emptyList();
+	private List<ClassNode> innerClasses = new ArrayList<>();
 
 	// store decompiled code
 	private CodeWriter code;
@@ -60,12 +58,12 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 	private ClassNode parentClass;
 
 	private ProcessState state = ProcessState.NOT_LOADED;
-	private final Set<ClassNode> dependencies = new HashSet<ClassNode>();
+	private final Set<ClassNode> dependencies = new HashSet<>();
 
 	// cache maps
 	private Map<MethodInfo, MethodNode> mthInfoMap = Collections.emptyMap();
 
-	public ClassNode(DexNode dex, ClassDef cls) throws DecodeException {
+	public ClassNode(DexNode dex, ClassDef cls) {
 		this.dex = dex;
 		this.clsInfo = ClassInfo.fromDex(dex, cls.getTypeIndex());
 		try {
@@ -74,7 +72,7 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 			} else {
 				this.superClass = dex.getType(cls.getSupertypeIndex());
 			}
-			this.interfaces = new ArrayList<ArgType>(cls.getInterfaces().length);
+			this.interfaces = new ArrayList<>(cls.getInterfaces().length);
 			for (short interfaceIdx : cls.getInterfaces()) {
 				this.interfaces.add(dex.getType(interfaceIdx));
 			}
@@ -83,8 +81,8 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 				int mthsCount = clsData.getDirectMethods().length + clsData.getVirtualMethods().length;
 				int fieldsCount = clsData.getStaticFields().length + clsData.getInstanceFields().length;
 
-				methods = new ArrayList<MethodNode>(mthsCount);
-				fields = new ArrayList<FieldNode>(fieldsCount);
+				methods = new ArrayList<>(mthsCount);
+				fields = new ArrayList<>(fieldsCount);
 
 				for (Method mth : clsData.getDirectMethods()) {
 					methods.add(new MethodNode(this, mth, false));
@@ -128,19 +126,21 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 
 			buildCache();
 		} catch (Exception e) {
-			throw new DecodeException("Error decode class: " + clsInfo, e);
+			throw new JadxRuntimeException("Error decode class: " + clsInfo, e);
 		}
 	}
 
 	// empty synthetic class
-	public ClassNode(DexNode dex, ClassInfo clsInfo) {
+	public ClassNode(DexNode dex, String name, int accessFlags) {
 		this.dex = dex;
-		this.clsInfo = clsInfo;
-		this.interfaces = Collections.emptyList();
-		this.methods = Collections.emptyList();
-		this.fields = Collections.emptyList();
-		this.accessFlags = new AccessInfo(AccessFlags.ACC_PUBLIC | AccessFlags.ACC_SYNTHETIC, AFType.CLASS);
+		this.clsInfo = ClassInfo.fromName(dex.root(), name);
+		this.interfaces = new ArrayList<>();
+		this.methods = new ArrayList<>();
+		this.fields = new ArrayList<>();
+		this.accessFlags = new AccessInfo(accessFlags, AFType.CLASS);
 		this.parentClass = this;
+
+		dex.addClassNode(this);
 	}
 
 	private void loadAnnotations(ClassDef cls) {
@@ -191,23 +191,23 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 					break;
 				}
 			}
-		} catch (JadxRuntimeException e) {
+		} catch (Exception e) {
 			LOG.error("Class signature parse error: {}", this, e);
 		}
 	}
 
 	private void setFieldsTypesFromSignature() {
 		for (FieldNode field : fields) {
-			SignatureParser sp = SignatureParser.fromNode(field);
-			if (sp != null) {
-				try {
+			try {
+				SignatureParser sp = SignatureParser.fromNode(field);
+				if (sp != null) {
 					ArgType gType = sp.consumeType();
 					if (gType != null) {
 						field.setType(gType);
 					}
-				} catch (JadxRuntimeException e) {
-					LOG.error("Field signature parse error: {}", field, e);
 				}
+			} catch (Exception e) {
+				LOG.error("Field signature parse error: {}.{}", this.getFullName(), field.getName(), e);
 			}
 		}
 	}
@@ -239,7 +239,6 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 			}
 		}
 		this.addAttr(new SourceFileAttr(fileName));
-		LOG.debug("Class '{}' compiled from '{}'", this, fileName);
 	}
 
 	@Override
@@ -248,8 +247,7 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 			try {
 				mth.load();
 			} catch (Exception e) {
-				LOG.error("Method load error: {}", mth, e);
-				mth.addAttr(new JadxErrorAttr(e));
+				mth.addError("Method load error", e);
 			}
 		}
 		for (ClassNode innerCls : getInnerClasses()) {
@@ -265,10 +263,11 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 		for (ClassNode innerCls : getInnerClasses()) {
 			innerCls.unload();
 		}
+		setState(UNLOADED);
 	}
 
 	private void buildCache() {
-		mthInfoMap = new HashMap<MethodInfo, MethodNode>(methods.size());
+		mthInfoMap = new HashMap<>(methods.size());
 		for (MethodNode mth : methods) {
 			mthInfoMap.put(mth.getMethodInfo(), mth);
 		}
@@ -322,7 +321,6 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 		return null;
 	}
 
-	@TestOnly
 	public FieldNode searchFieldByName(String name) {
 		for (FieldNode f : fields) {
 			if (f.getName().equals(name)) {
@@ -353,8 +351,7 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 		if (parentClass == null) {
 			if (clsInfo.isInner()) {
 				ClassNode parent = dex().resolveClass(clsInfo.getParentClass());
-				parent = parent == null ? this : parent;
-				parentClass = parent;
+				parentClass = parent == null ? this : parent;
 			} else {
 				parentClass = this;
 			}
@@ -364,7 +361,7 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 
 	public ClassNode getTopParentClass() {
 		ClassNode parent = getParentClass();
-		return parent == this ? this : parent.getParentClass();
+		return parent == this ? this : parent.getTopParentClass();
 	}
 
 	public List<ClassNode> getInnerClasses() {
@@ -372,10 +369,8 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 	}
 
 	public void addInnerClass(ClassNode cls) {
-		if (innerClasses.isEmpty()) {
-			innerClasses = new ArrayList<ClassNode>(3);
-		}
 		innerClasses.add(cls);
+		cls.parentClass = this;
 	}
 
 	public boolean isEnum() {
@@ -417,6 +412,11 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 	@Override
 	public RootNode root() {
 		return dex.root();
+	}
+
+	@Override
+	public String typeName() {
+		return "class";
 	}
 
 	public String getRawName() {
@@ -484,7 +484,6 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 			return clsInfo.equals(other.clsInfo);
 		}
 		return false;
-
 	}
 
 	@Override

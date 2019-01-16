@@ -1,45 +1,6 @@
 package jadx.gui.ui;
 
-import jadx.api.ResourceFile;
-import jadx.gui.JadxWrapper;
-import jadx.gui.jobs.BackgroundWorker;
-import jadx.gui.jobs.DecompileJob;
-import jadx.gui.jobs.IndexJob;
-import jadx.gui.settings.JadxSettings;
-import jadx.gui.settings.JadxSettingsWindow;
-import jadx.gui.treemodel.JClass;
-import jadx.gui.treemodel.JNode;
-import jadx.gui.treemodel.JResource;
-import jadx.gui.treemodel.JRoot;
-import jadx.gui.ui.SearchDialog.SearchOptions;
-import jadx.gui.update.JadxUpdate;
-import jadx.gui.update.JadxUpdate.IUpdateCallback;
-import jadx.gui.update.data.Release;
-import jadx.gui.utils.CacheObject;
-import jadx.gui.utils.Link;
-import jadx.gui.utils.NLS;
-import jadx.gui.utils.Position;
-import jadx.gui.utils.Utils;
-
-import javax.swing.AbstractAction;
-import javax.swing.Action;
-import javax.swing.Box;
-import javax.swing.ImageIcon;
-import javax.swing.JCheckBoxMenuItem;
-import javax.swing.JFileChooser;
-import javax.swing.JFrame;
-import javax.swing.JMenu;
-import javax.swing.JMenuBar;
-import javax.swing.JMenuItem;
-import javax.swing.JPanel;
-import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
-import javax.swing.JToggleButton;
-import javax.swing.JToolBar;
-import javax.swing.JTree;
-import javax.swing.ProgressMonitor;
-import javax.swing.SwingUtilities;
-import javax.swing.WindowConstants;
+import javax.swing.*;
 import javax.swing.event.MenuEvent;
 import javax.swing.event.MenuListener;
 import javax.swing.event.TreeExpansionEvent;
@@ -52,12 +13,7 @@ import javax.swing.tree.ExpandVetoException;
 import javax.swing.tree.TreeNode;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
-import java.awt.BorderLayout;
-import java.awt.Component;
-import java.awt.DisplayMode;
-import java.awt.Font;
-import java.awt.GraphicsDevice;
-import java.awt.GraphicsEnvironment;
+import java.awt.*;
 import java.awt.dnd.DnDConstants;
 import java.awt.dnd.DropTarget;
 import java.awt.event.ActionEvent;
@@ -67,13 +23,36 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.io.FileInputStream;
 import java.util.Arrays;
-import java.util.EnumSet;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import org.fife.ui.rsyntaxtextarea.Theme;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import jadx.api.ResourceFile;
+import jadx.gui.JadxWrapper;
+import jadx.gui.jobs.BackgroundWorker;
+import jadx.gui.jobs.DecompileJob;
+import jadx.gui.jobs.IndexJob;
+import jadx.gui.settings.JadxSettings;
+import jadx.gui.settings.JadxSettingsWindow;
+import jadx.gui.treemodel.JCertificate;
+import jadx.gui.treemodel.JClass;
+import jadx.gui.treemodel.JLoadableNode;
+import jadx.gui.treemodel.JNode;
+import jadx.gui.treemodel.JResource;
+import jadx.gui.treemodel.JRoot;
+import jadx.gui.update.JadxUpdate;
+import jadx.gui.update.JadxUpdate.IUpdateCallback;
+import jadx.gui.update.data.Release;
+import jadx.gui.utils.CacheObject;
+import jadx.gui.utils.Link;
+import jadx.gui.utils.NLS;
+import jadx.gui.utils.JumpPosition;
+import jadx.gui.utils.Utils;
 
 import static javax.swing.KeyStroke.getKeyStroke;
 
@@ -101,9 +80,9 @@ public class MainWindow extends JFrame {
 	private static final ImageIcon ICON_DEOBF = Utils.openIcon("lock_edit");
 	private static final ImageIcon ICON_LOG = Utils.openIcon("report");
 
-	private final JadxWrapper wrapper;
-	private final JadxSettings settings;
-	private final CacheObject cacheObject;
+	private final transient JadxWrapper wrapper;
+	private final transient JadxSettings settings;
+	private final transient CacheObject cacheObject;
 
 	private JPanel mainPanel;
 
@@ -111,19 +90,20 @@ public class MainWindow extends JFrame {
 	private DefaultTreeModel treeModel;
 	private JRoot treeRoot;
 	private TabbedPane tabbedPane;
+	private HeapUsageBar heapUsageBar;
 
 	private boolean isFlattenPackage;
 	private JToggleButton flatPkgButton;
 	private JCheckBoxMenuItem flatPkgMenuItem;
+	private JCheckBoxMenuItem heapUsageBarMenuItem;
 
 	private JToggleButton deobfToggleBtn;
 	private JCheckBoxMenuItem deobfMenuItem;
 
-	private Link updateLink;
-	private ProgressPanel progressPane;
-	private BackgroundWorker backgroundWorker;
-
-	private DropTarget dropTarget;
+	private transient Link updateLink;
+	private transient ProgressPanel progressPane;
+	private transient BackgroundWorker backgroundWorker;
+	private transient Theme editorTheme;
 
 	public MainWindow(JadxSettings settings) {
 		this.wrapper = new JadxWrapper(settings);
@@ -133,20 +113,28 @@ public class MainWindow extends JFrame {
 		resetCache();
 		initUI();
 		initMenuAndToolbar();
+		applySettings();
 		checkForUpdate();
+	}
+
+	private void applySettings() {
+		setFont(settings.getFont());
+		setEditorTheme(settings.getEditorThemePath());
+		loadSettings();
 	}
 
 	public void open() {
 		pack();
 		setLocationAndPosition();
+		heapUsageBar.setVisible(settings.isShowHeapUsageBar());
 		setVisible(true);
 		setLocationRelativeTo(null);
 		setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
 
-		if (settings.getInput().isEmpty()) {
+		if (settings.getFiles().isEmpty()) {
 			openFile();
 		} else {
-			openFile(settings.getInput().get(0));
+			openFile(new File(settings.getFiles().get(0)));
 		}
 	}
 
@@ -171,15 +159,15 @@ public class MainWindow extends JFrame {
 	public void openFile() {
 		JFileChooser fileChooser = new JFileChooser();
 		fileChooser.setAcceptAllFileFilterUsed(true);
-		String[] exts = {"apk", "dex", "jar", "class", "zip", "aar"};
+		String[] exts = {"apk", "dex", "jar", "class", "zip", "aar", "arsc"};
 		String description = "supported files: " + Arrays.toString(exts).replace('[', '(').replace(']', ')');
 		fileChooser.setFileFilter(new FileNameExtensionFilter(description, exts));
-		fileChooser.setToolTipText(NLS.str("file.open"));
+		fileChooser.setToolTipText(NLS.str("file.open_action"));
 		String currentDirectory = settings.getLastOpenFilePath();
 		if (!currentDirectory.isEmpty()) {
 			fileChooser.setCurrentDirectory(new File(currentDirectory));
 		}
-		int ret = fileChooser.showDialog(mainPanel, NLS.str("file.open"));
+		int ret = fileChooser.showDialog(mainPanel, NLS.str("file.open_title"));
 		if (ret == JFileChooser.APPROVE_OPTION) {
 			settings.setLastOpenFilePath(fileChooser.getCurrentDirectory().getPath());
 			openFile(fileChooser.getSelectedFile());
@@ -200,7 +188,7 @@ public class MainWindow extends JFrame {
 	protected void resetCache() {
 		cacheObject.reset();
 		// TODO: decompilation freezes sometime with several threads
-		int threadsCount = 1; // settings.getThreadsCount();
+		int threadsCount = settings.getThreadsCount();
 		cacheObject.setDecompileJob(new DecompileJob(wrapper, threadsCount));
 		cacheObject.setIndexJob(new IndexJob(wrapper, cacheObject, threadsCount));
 	}
@@ -308,11 +296,14 @@ public class MainWindow extends JFrame {
 				if (resFile != null && JResource.isSupportedForView(resFile.getType())) {
 					tabbedPane.showResource(res);
 				}
+			} else if (obj instanceof JCertificate) {
+				JCertificate cert = (JCertificate) obj;
+				tabbedPane.showCertificate(cert);
 			} else if (obj instanceof JNode) {
 				JNode node = (JNode) obj;
 				JClass cls = node.getRootClass();
 				if (cls != null) {
-					tabbedPane.codeJump(new Position(cls, node.getLine()));
+					tabbedPane.codeJump(new JumpPosition(cls, node.getLine()));
 				}
 			}
 		} catch (Exception e) {
@@ -346,13 +337,13 @@ public class MainWindow extends JFrame {
 	}
 
 	private void initMenuAndToolbar() {
-		Action openAction = new AbstractAction(NLS.str("file.open"), ICON_OPEN) {
+		Action openAction = new AbstractAction(NLS.str("file.open_action"), ICON_OPEN) {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				openFile();
 			}
 		};
-		openAction.putValue(Action.SHORT_DESCRIPTION, NLS.str("file.open"));
+		openAction.putValue(Action.SHORT_DESCRIPTION, NLS.str("file.open_action"));
 		openAction.putValue(Action.ACCELERATOR_KEY, getKeyStroke(KeyEvent.VK_O, KeyEvent.CTRL_DOWN_MASK));
 
 		Action saveAllAction = new AbstractAction(NLS.str("file.save_all"), ICON_SAVE_ALL) {
@@ -397,6 +388,13 @@ public class MainWindow extends JFrame {
 		flatPkgMenuItem = new JCheckBoxMenuItem(NLS.str("menu.flatten"), ICON_FLAT_PKG);
 		flatPkgMenuItem.setState(isFlattenPackage);
 
+		heapUsageBarMenuItem = new JCheckBoxMenuItem(NLS.str("menu.heapUsageBar"));
+		heapUsageBarMenuItem.setState(settings.isShowHeapUsageBar());
+		heapUsageBarMenuItem.addActionListener(event -> {
+			settings.setShowHeapUsageBar(!settings.isShowHeapUsageBar());
+			heapUsageBar.setVisible(settings.isShowHeapUsageBar());
+		});
+
 		Action syncAction = new AbstractAction(NLS.str("menu.sync"), ICON_SYNC) {
 			@Override
 			public void actionPerformed(ActionEvent e) {
@@ -409,7 +407,7 @@ public class MainWindow extends JFrame {
 		Action textSearchAction = new AbstractAction(NLS.str("menu.text_search"), ICON_SEARCH) {
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				new SearchDialog(MainWindow.this, EnumSet.of(SearchOptions.CODE)).setVisible(true);
+				new SearchDialog(MainWindow.this, true).setVisible(true);
 			}
 		};
 		textSearchAction.putValue(Action.SHORT_DESCRIPTION, NLS.str("menu.text_search"));
@@ -419,13 +417,13 @@ public class MainWindow extends JFrame {
 		Action clsSearchAction = new AbstractAction(NLS.str("menu.class_search"), ICON_FIND) {
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				new SearchDialog(MainWindow.this, EnumSet.of(SearchOptions.CLASS)).setVisible(true);
+				new SearchDialog(MainWindow.this, false).setVisible(true);
 			}
 		};
 		clsSearchAction.putValue(Action.SHORT_DESCRIPTION, NLS.str("menu.class_search"));
 		clsSearchAction.putValue(Action.ACCELERATOR_KEY, getKeyStroke(KeyEvent.VK_N, KeyEvent.CTRL_DOWN_MASK));
 
-		Action deobfAction = new AbstractAction(NLS.str("preferences.deobfuscation"), ICON_DEOBF) {
+		Action deobfAction = new AbstractAction(NLS.str("menu.deobfuscation"), ICON_DEOBF) {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				toggleDeobfuscation();
@@ -445,7 +443,7 @@ public class MainWindow extends JFrame {
 		Action logAction = new AbstractAction(NLS.str("menu.log"), ICON_LOG) {
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				new LogViewer(settings).setVisible(true);
+				new LogViewer(MainWindow.this).setVisible(true);
 			}
 		};
 		logAction.putValue(Action.SHORT_DESCRIPTION, NLS.str("menu.log"));
@@ -495,6 +493,7 @@ public class MainWindow extends JFrame {
 		view.setMnemonic(KeyEvent.VK_V);
 		view.add(flatPkgMenuItem);
 		view.add(syncAction);
+		view.add(heapUsageBarMenuItem);
 
 		JMenu nav = new JMenu(NLS.str("menu.navigation"));
 		nav.setMnemonic(KeyEvent.VK_N);
@@ -523,12 +522,7 @@ public class MainWindow extends JFrame {
 
 		flatPkgButton = new JToggleButton(ICON_FLAT_PKG);
 		flatPkgButton.setSelected(isFlattenPackage);
-		ActionListener flatPkgAction = new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				toggleFlattenPackage();
-			}
-		};
+		ActionListener flatPkgAction = e -> toggleFlattenPackage();
 		flatPkgMenuItem.addActionListener(flatPkgAction);
 		flatPkgButton.addActionListener(flatPkgAction);
 		flatPkgButton.setToolTipText(NLS.str("menu.flatten"));
@@ -569,8 +563,8 @@ public class MainWindow extends JFrame {
 		splitPane.setResizeWeight(SPLIT_PANE_RESIZE_WEIGHT);
 		mainPanel.add(splitPane);
 
-		DefaultMutableTreeNode treeRoot = new DefaultMutableTreeNode(NLS.str("msg.open_file"));
-		treeModel = new DefaultTreeModel(treeRoot);
+		DefaultMutableTreeNode treeRootNode = new DefaultMutableTreeNode(NLS.str("msg.open_file"));
+		treeModel = new DefaultTreeModel(treeRootNode);
 		tree = new JTree(treeModel);
 		tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
 		tree.addMouseListener(new MouseAdapter() {
@@ -590,8 +584,8 @@ public class MainWindow extends JFrame {
 		tree.setCellRenderer(new DefaultTreeCellRenderer() {
 			@Override
 			public Component getTreeCellRendererComponent(JTree tree,
-					Object value, boolean selected, boolean expanded,
-					boolean isLeaf, int row, boolean focused) {
+			                                              Object value, boolean selected, boolean expanded,
+			                                              boolean isLeaf, int row, boolean focused) {
 				Component c = super.getTreeCellRendererComponent(tree, value, selected, expanded, isLeaf, row, focused);
 				if (value instanceof JNode) {
 					setIcon(((JNode) value).getIcon());
@@ -604,9 +598,8 @@ public class MainWindow extends JFrame {
 			public void treeWillExpand(TreeExpansionEvent event) throws ExpandVetoException {
 				TreePath path = event.getPath();
 				Object node = path.getLastPathComponent();
-				if (node instanceof JClass) {
-					JClass cls = (JClass) node;
-					cls.getRootClass().load();
+				if (node instanceof JLoadableNode) {
+					((JLoadableNode) node).loadNode();
 				}
 			}
 
@@ -625,7 +618,10 @@ public class MainWindow extends JFrame {
 		tabbedPane = new TabbedPane(this);
 		splitPane.setRightComponent(tabbedPane);
 
-		dropTarget = new DropTarget(this, DnDConstants.ACTION_COPY, new MainDropTarget(this));
+		new DropTarget(this, DnDConstants.ACTION_COPY, new MainDropTarget(this));
+
+		heapUsageBar = new HeapUsageBar();
+		mainPanel.add(heapUsageBar, BorderLayout.SOUTH);
 
 		setContentPane(mainPanel);
 		setTitle(DEFAULT_TITLE);
@@ -645,6 +641,26 @@ public class MainWindow extends JFrame {
 
 	public void updateFont(Font font) {
 		setFont(font);
+	}
+
+	public void setEditorTheme(String editorThemePath) {
+		try {
+			editorTheme = Theme.load(getClass().getResourceAsStream(editorThemePath));
+		} catch (Exception e) {
+			LOG.error("Can't load editor theme from classpath: {}", editorThemePath);
+			try {
+				editorTheme = Theme.load(new FileInputStream(editorThemePath));
+			} catch (Exception e2) {
+				LOG.error("Can't load editor theme from file: {}", editorThemePath);
+			}
+		}
+	}
+
+	public Theme getEditorTheme() {
+		return editorTheme;
+	}
+
+	public void loadSettings() {
 		tabbedPane.loadSettings();
 	}
 
@@ -683,7 +699,7 @@ public class MainWindow extends JFrame {
 		}
 
 		@Override
-		public void menuSelected(MenuEvent e) {
+		public void menuSelected(MenuEvent menuEvent) {
 			recentFiles.removeAll();
 			File openFile = wrapper.getOpenFile();
 			String currentFile = openFile == null ? "" : openFile.getAbsolutePath();
@@ -693,12 +709,7 @@ public class MainWindow extends JFrame {
 				}
 				JMenuItem menuItem = new JMenuItem(file);
 				recentFiles.add(menuItem);
-				menuItem.addActionListener(new ActionListener() {
-					@Override
-					public void actionPerformed(ActionEvent e) {
-						openFile(new File(file));
-					}
-				});
+				menuItem.addActionListener(e -> openFile(new File(file)));
 			}
 			if (recentFiles.getItemCount() == 0) {
 				recentFiles.add(new JMenuItem(NLS.str("menu.no_recent_files")));
@@ -713,5 +724,4 @@ public class MainWindow extends JFrame {
 		public void menuCanceled(MenuEvent e) {
 		}
 	}
-
 }

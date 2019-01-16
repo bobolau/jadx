@@ -1,9 +1,5 @@
 package jadx.core.codegen;
 
-import jadx.api.CodePosition;
-import jadx.core.dex.attributes.nodes.LineAttrNode;
-import jadx.core.utils.files.FileUtils;
-
 import java.io.File;
 import java.io.PrintWriter;
 import java.util.Collections;
@@ -16,23 +12,27 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static jadx.core.utils.files.FileUtils.close;
+import jadx.api.CodePosition;
+import jadx.core.dex.attributes.nodes.LineAttrNode;
+import jadx.core.utils.StringUtils;
+import jadx.core.utils.files.FileUtils;
+import jadx.core.utils.files.ZipSecurity;
 
 public class CodeWriter {
 	private static final Logger LOG = LoggerFactory.getLogger(CodeWriter.class);
 
 	public static final String NL = System.getProperty("line.separator");
-	public static final String INDENT = "    ";
+	public static final String INDENT_STR = "    ";
 
 	private static final boolean ADD_LINE_NUMBERS = false;
 
 	private static final String[] INDENT_CACHE = {
 			"",
-			INDENT,
-			INDENT + INDENT,
-			INDENT + INDENT + INDENT,
-			INDENT + INDENT + INDENT + INDENT,
-			INDENT + INDENT + INDENT + INDENT + INDENT,
+			INDENT_STR,
+			INDENT_STR + INDENT_STR,
+			INDENT_STR + INDENT_STR + INDENT_STR,
+			INDENT_STR + INDENT_STR + INDENT_STR + INDENT_STR,
+			INDENT_STR + INDENT_STR + INDENT_STR + INDENT_STR + INDENT_STR,
 	};
 
 	private StringBuilder buf = new StringBuilder();
@@ -94,6 +94,15 @@ public class CodeWriter {
 		return this;
 	}
 
+	public CodeWriter addMultiLine(String str) {
+		buf.append(str);
+		if (str.contains(NL)) {
+			line += StringUtils.countMatches(str, NL);
+			offset = 0;
+		}
+		return this;
+	}
+
 	public CodeWriter add(String str) {
 		buf.append(str);
 		offset += str.length();
@@ -127,7 +136,7 @@ public class CodeWriter {
 	}
 
 	public CodeWriter addIndent() {
-		add(INDENT);
+		add(INDENT_STR);
 		return this;
 	}
 
@@ -148,9 +157,9 @@ public class CodeWriter {
 		if (curIndent < INDENT_CACHE.length) {
 			this.indentStr = INDENT_CACHE[curIndent];
 		} else {
-			StringBuilder s = new StringBuilder(curIndent * INDENT.length());
+			StringBuilder s = new StringBuilder(curIndent * INDENT_STR.length());
 			for (int i = 0; i < curIndent; i++) {
-				s.append(INDENT);
+				s.append(INDENT_STR);
 			}
 			this.indentStr = s.toString();
 		}
@@ -182,6 +191,11 @@ public class CodeWriter {
 		return indent;
 	}
 
+	public void setIndent(int indent) {
+		this.indent = indent;
+		updateIndent();
+	}
+
 	public int getLine() {
 		return line;
 	}
@@ -209,7 +223,7 @@ public class CodeWriter {
 
 	private Object attachAnnotation(Object obj, CodePosition pos) {
 		if (annotations.isEmpty()) {
-			annotations = new HashMap<CodePosition, Object>();
+			annotations = new HashMap<>();
 		}
 		return annotations.put(pos, obj);
 	}
@@ -227,7 +241,7 @@ public class CodeWriter {
 
 	private void attachSourceLine(int decompiledLine, int sourceLine) {
 		if (lineMap.isEmpty()) {
-			lineMap = new TreeMap<Integer, Integer>();
+			lineMap = new TreeMap<>();
 		}
 		lineMap.put(decompiledLine, sourceLine);
 	}
@@ -255,8 +269,9 @@ public class CodeWriter {
 	}
 
 	private void removeFirstEmptyLine() {
-		if (buf.indexOf(NL) == 0) {
-			buf.delete(0, NL.length());
+		int len = NL.length();
+		if (buf.substring(0, len).equals(NL)) {
+			buf.delete(0, len);
 		}
 	}
 
@@ -274,10 +289,16 @@ public class CodeWriter {
 	}
 
 	public void save(File dir, String subDir, String fileName) {
+		if (!ZipSecurity.isValidZipEntryName(subDir) || !ZipSecurity.isValidZipEntryName(fileName)) {
+			return;
+		}
 		save(dir, new File(subDir, fileName).getPath());
 	}
 
 	public void save(File dir, String fileName) {
+		if (!ZipSecurity.isValidZipEntryName(fileName)) {
+			return;
+		}
 		save(new File(dir, fileName));
 	}
 
@@ -286,15 +307,10 @@ public class CodeWriter {
 			finish();
 		}
 		File outFile = FileUtils.prepareFile(file);
-		PrintWriter out = null;
-		try {
-			out = new PrintWriter(outFile, "UTF-8");
+		try (PrintWriter out = new PrintWriter(outFile, "UTF-8")) {
 			out.println(code);
 		} catch (Exception e) {
 			LOG.error("Save file error", e);
-		} finally {
-			close(out);
 		}
 	}
-
 }

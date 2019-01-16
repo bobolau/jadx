@@ -1,9 +1,5 @@
 package jadx.core.clsp;
 
-import jadx.core.dex.nodes.ClassNode;
-import jadx.core.utils.exceptions.DecodeException;
-import jadx.core.utils.exceptions.JadxRuntimeException;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -17,16 +13,20 @@ import java.util.WeakHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import jadx.core.dex.nodes.ClassNode;
+import jadx.core.utils.exceptions.DecodeException;
+import jadx.core.utils.exceptions.JadxRuntimeException;
+
 /**
  * Classes hierarchy graph
  */
 public class ClspGraph {
 	private static final Logger LOG = LoggerFactory.getLogger(ClspGraph.class);
 
-	private final Map<String, Set<String>> ancestorCache = new WeakHashMap<String, Set<String>>();
+	private final Map<String, Set<String>> ancestorCache = Collections.synchronizedMap(new WeakHashMap<String, Set<String>>());
 	private Map<String, NClass> nameMap;
 
-	private final Set<String> missingClasses = new HashSet<String>();
+	private final Set<String> missingClasses = new HashSet<>();
 
 	public void load() throws IOException, DecodeException {
 		ClsSet set = new ClsSet();
@@ -36,7 +36,7 @@ public class ClspGraph {
 
 	public void addClasspath(ClsSet set) {
 		if (nameMap == null) {
-			nameMap = new HashMap<String, NClass>(set.getClassesCount());
+			nameMap = new HashMap<>(set.getClassesCount());
 			set.addToMap(nameMap);
 		} else {
 			throw new JadxRuntimeException("Classpath already loaded");
@@ -110,7 +110,7 @@ public class ClspGraph {
 			missingClasses.add(clsName);
 			return Collections.emptySet();
 		}
-		result = new HashSet<String>();
+		result = new HashSet<>();
 		addAncestorsNames(cls, result);
 		if (result.isEmpty()) {
 			result = Collections.emptySet();
@@ -120,9 +120,11 @@ public class ClspGraph {
 	}
 
 	private void addAncestorsNames(NClass cls, Set<String> result) {
-		result.add(cls.getName());
-		for (NClass p : cls.getParents()) {
-			addAncestorsNames(p, result);
+		boolean isNew = result.add(cls.getName());
+		if (isNew) {
+			for (NClass p : cls.getParents()) {
+				addAncestorsNames(p, result);
+			}
 		}
 	}
 
@@ -133,7 +135,7 @@ public class ClspGraph {
 		}
 		LOG.warn("Found {} references to unknown classes", count);
 		if (LOG.isDebugEnabled()) {
-			List<String> clsNames = new ArrayList<String>(missingClasses);
+			List<String> clsNames = new ArrayList<>(missingClasses);
 			Collections.sort(clsNames);
 			for (String cls : clsNames) {
 				LOG.debug("  {}", cls);

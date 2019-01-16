@@ -1,23 +1,23 @@
 package jadx.gui.treemodel;
 
+import javax.swing.*;
+
 import jadx.api.JavaNode;
 import jadx.gui.utils.search.StringRef;
-
-import javax.swing.Icon;
 
 public class CodeNode extends JNode {
 
 	private static final long serialVersionUID = 1658650786734966545L;
 
-	private final JNode jNode;
-	private final JClass jParent;
-	private final StringRef line;
-	private final int lineNum;
+	private final transient JNode jNode;
+	private final transient JClass jParent;
+	private final transient StringRef line;
+	private final transient int lineNum;
 
-	public CodeNode(JNode jNode, int lineNum, StringRef line) {
+	public CodeNode(JNode jNode, int lineNum, StringRef lineStr) {
 		this.jNode = jNode;
 		this.jParent = this.jNode.getJParent();
-		this.line = line;
+		this.line = lineStr;
 		this.lineNum = lineNum;
 	}
 

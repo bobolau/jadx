@@ -1,12 +1,5 @@
 package jadx.core.export;
 
-import jadx.core.dex.attributes.AFlag;
-import jadx.core.dex.nodes.ClassNode;
-import jadx.core.dex.nodes.DexNode;
-import jadx.core.dex.nodes.RootNode;
-import jadx.core.utils.exceptions.JadxRuntimeException;
-import jadx.core.utils.files.FileUtils;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
@@ -17,11 +10,18 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import jadx.core.dex.attributes.AFlag;
+import jadx.core.dex.nodes.ClassNode;
+import jadx.core.dex.nodes.DexNode;
+import jadx.core.dex.nodes.RootNode;
+import jadx.core.utils.exceptions.JadxRuntimeException;
+import jadx.core.utils.files.FileUtils;
+
 public class ExportGradleProject {
 
 	private static final Logger LOG = LoggerFactory.getLogger(ExportGradleProject.class);
 
-	private static final Set<String> IGNORE_CLS_NAMES = new HashSet<String>(Arrays.asList(
+	private static final Set<String> IGNORE_CLS_NAMES = new HashSet<>(Arrays.asList(
 			"R",
 			"BuildConfig"
 	));
@@ -40,8 +40,8 @@ public class ExportGradleProject {
 
 	public void init() {
 		try {
-			FileUtils.makeDirsForFile(srcOutDir);
-			FileUtils.makeDirsForFile(resOutDir);
+			FileUtils.makeDirs(srcOutDir);
+			FileUtils.makeDirs(resOutDir);
 			saveBuildGradle();
 			skipGeneratedClasses();
 		} catch (Exception e) {

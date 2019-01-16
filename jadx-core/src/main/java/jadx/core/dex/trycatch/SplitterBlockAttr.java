@@ -23,7 +23,6 @@ public class SplitterBlockAttr implements IAttribute {
 
 	@Override
 	public String toString() {
-		return "Splitter: " + block;
+		return "Splitter:" + block;
 	}
-
 }

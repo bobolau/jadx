@@ -1,11 +1,16 @@
 package jadx.core.utils;
 
-import jadx.api.JadxDecompiler;
-
+import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
+import java.util.function.Function;
+
+import jadx.api.JadxDecompiler;
+import jadx.core.codegen.CodeWriter;
 
 public class Utils {
 
@@ -26,19 +31,30 @@ public class Utils {
 		return 'L' + obj.replace('.', '/') + ';';
 	}
 
-	public static String listToString(Iterable<?> list) {
-		if (list == null) {
+	public static String listToString(Iterable<?> objects) {
+		return listToString(objects, ", ");
+	}
+
+	public static String listToString(Iterable<?> objects, String joiner) {
+		if (objects == null) {
 			return "";
 		}
-		StringBuilder str = new StringBuilder();
-		for (Iterator<?> it = list.iterator(); it.hasNext(); ) {
-			Object o = it.next();
-			str.append(o);
-			if (it.hasNext()) {
-				str.append(", ");
-			}
+		StringBuilder sb = new StringBuilder();
+		listToString(sb, objects, joiner, Object::toString);
+		return sb.toString();
+	}
+
+	public static <T> void listToString(StringBuilder sb, Iterable<T> objects, String joiner, Function<T, String> toStr) {
+		if (objects == null) {
+			return;
 		}
-		return str.toString();
+		Iterator<T> it = objects.iterator();
+		if (it.hasNext()) {
+			sb.append(toStr.apply(it.next()));
+		}
+		while (it.hasNext()) {
+			sb.append(joiner).append(toStr.apply(it.next()));
+		}
 	}
 
 	public static String arrayToString(Object[] array) {
@@ -64,6 +80,37 @@ public class Utils {
 		filterRecursive(throwable);
 		throwable.printStackTrace(pw);
 		return sw.getBuffer().toString();
+	}
+
+	public static void appendStackTrace(CodeWriter code, Throwable throwable) {
+		if (throwable == null) {
+			return;
+		}
+		code.startLine();
+		OutputStream w = new OutputStream() {
+			@Override
+			public void write(int b) {
+				char c = (char) b;
+				switch (c) {
+					case '\n':
+						code.startLine();
+						break;
+
+					case '\r':
+						// ignore
+						break;
+
+					default:
+						code.add(c);
+						break;
+				}
+			}
+		};
+		try (PrintWriter pw = new PrintWriter(w, true)) {
+			filterRecursive(throwable);
+			throwable.printStackTrace(pw);
+			pw.flush();
+		}
 	}
 
 	private static void filterRecursive(Throwable th) {
@@ -96,7 +143,14 @@ public class Utils {
 		}
 	}
 
-	public static int compare(int x, int y) {
-		return x < y ? -1 : x == y ? 0 : 1;
+	@SuppressWarnings("unchecked")
+	public static <T> List<T> lockList(List<T> list) {
+		if (list.isEmpty()) {
+			return Collections.emptyList();
+		}
+		if (list.size() == 1) {
+			return Collections.singletonList(list.get(0));
+		}
+		return new ImmutableList<>(list);
 	}
 }

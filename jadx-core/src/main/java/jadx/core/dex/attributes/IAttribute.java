@@ -1,7 +1,5 @@
 package jadx.core.dex.attributes;
 
 public interface IAttribute {
-
-	AType<?> getType();
-
+	<T extends IAttribute> AType<T> getType();
 }

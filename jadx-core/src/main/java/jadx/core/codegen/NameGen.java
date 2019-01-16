@@ -1,5 +1,10 @@
 package jadx.core.codegen;
 
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
+
 import jadx.core.Consts;
 import jadx.core.deobf.NameMapper;
 import jadx.core.dex.attributes.nodes.LoopLabelAttr;
@@ -17,21 +22,16 @@ import jadx.core.dex.nodes.InsnNode;
 import jadx.core.dex.nodes.MethodNode;
 import jadx.core.utils.StringUtils;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-
 public class NameGen {
 
 	private static final Map<String, String> OBJ_ALIAS;
 
-	private final Set<String> varNames = new HashSet<String>();
+	private final Set<String> varNames = new LinkedHashSet<>();
 	private final MethodNode mth;
 	private final boolean fallback;
 
 	static {
-		OBJ_ALIAS = new HashMap<String, String>();
+		OBJ_ALIAS = new HashMap<>();
 		OBJ_ALIAS.put(Consts.CLASS_STRING, "str");
 		OBJ_ALIAS.put(Consts.CLASS_CLASS, "cls");
 		OBJ_ALIAS.put(Consts.CLASS_THROWABLE, "th");
@@ -102,16 +102,11 @@ public class NameGen {
 		if (fallback) {
 			return getFallbackName(arg);
 		}
-		String name = arg.getName();
-		String varName;
-		if (name != null) {
-			if ("this".equals(name)) {
-				return name;
-			}
-			varName = name;
-		} else {
-			varName = guessName(arg);
+		if (arg.isThis()) {
+			return RegisterArg.THIS_ARG_NAME;
 		}
+		String name = arg.getName();
+		String varName = name != null ? name : guessName(arg);
 		if (NameMapper.isReserved(varName)) {
 			return varName + "R";
 		}
@@ -141,11 +136,11 @@ public class NameGen {
 	private String makeNameForType(ArgType type) {
 		if (type.isPrimitive()) {
 			return makeNameForPrimitive(type);
-		} else if (type.isArray()) {
-			return makeNameForType(type.getArrayRootElement()) + "Arr";
-		} else {
-			return makeNameForObject(type);
 		}
+		if (type.isArray()) {
+			return makeNameForType(type.getArrayRootElement()) + "Arr";
+		}
+		return makeNameForObject(type);
 	}
 
 	private static String makeNameForPrimitive(ArgType type) {
@@ -158,11 +153,14 @@ public class NameGen {
 			if (alias != null) {
 				return alias;
 			}
-			ClassInfo extClsInfo = ClassInfo.extCls(mth.dex(), type);
+			ClassInfo extClsInfo = ClassInfo.extCls(mth.root(), type);
 			String shortName = extClsInfo.getShortName();
 			String vName = fromName(shortName);
 			if (vName != null) {
 				return vName;
+			}
+			if (shortName != null) {
+				return StringUtils.escape(shortName.toLowerCase());
 			}
 		}
 		return StringUtils.escape(type.toString());

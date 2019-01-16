@@ -1,19 +1,17 @@
 package jadx.gui.settings;
 
-import jadx.gui.JadxGUI;
-
 import java.lang.reflect.Modifier;
-import java.lang.reflect.Type;
 import java.util.prefs.Preferences;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.InstanceCreator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import jadx.gui.JadxGUI;
 
 public class JadxSettingsAdapter {
 
@@ -47,9 +45,14 @@ public class JadxSettingsAdapter {
 			String jsonSettings = PREFS.get(JADX_GUI_KEY, "");
 			JadxSettings settings = fromString(jsonSettings);
 			if (settings == null) {
-				return new JadxSettings();
+				LOG.debug("Created new settings.");
+				settings = JadxSettings.makeDefault();
+			} else {
+				settings.fixOnLoad();
 			}
-			LOG.debug("Loaded settings: {}", makeString(settings));
+			if (LOG.isDebugEnabled()) {
+				LOG.debug("Loaded settings: {}", makeString(settings));
+			}
 			return settings;
 		} catch (Exception e) {
 			LOG.error("Error load settings", e);
@@ -81,11 +84,8 @@ public class JadxSettingsAdapter {
 	}
 
 	private static <T> void populate(GsonBuilder builder, String json, Class<T> type, final T into) {
-		builder.registerTypeAdapter(type, new InstanceCreator<T>() {
-			@Override
-			public T createInstance(Type t) {
-				return into;
-			}
-		}).create().fromJson(json, type);
+		builder.registerTypeAdapter(type, (InstanceCreator<T>) t -> into)
+				.create()
+				.fromJson(json, type);
 	}
 }

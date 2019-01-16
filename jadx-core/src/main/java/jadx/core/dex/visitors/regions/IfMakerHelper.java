@@ -1,5 +1,13 @@
 package jadx.core.dex.visitors.regions;
 
+import java.util.Collection;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import jadx.core.dex.attributes.AFlag;
 import jadx.core.dex.attributes.AType;
 import jadx.core.dex.attributes.nodes.LoopInfo;
@@ -15,13 +23,6 @@ import jadx.core.dex.regions.conditions.IfCondition.Mode;
 import jadx.core.dex.regions.conditions.IfInfo;
 import jadx.core.utils.BlockUtils;
 import jadx.core.utils.exceptions.JadxRuntimeException;
-
-import java.util.Collection;
-import java.util.List;
-import java.util.Set;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static jadx.core.dex.visitors.regions.RegionMaker.isEqualPaths;
 import static jadx.core.dex.visitors.regions.RegionMaker.isEqualReturnBlocks;
@@ -49,8 +50,14 @@ public class IfMakerHelper {
 	}
 
 	static IfInfo restructureIf(MethodNode mth, BlockNode block, IfInfo info) {
-		final BlockNode thenBlock = info.getThenBlock();
-		final BlockNode elseBlock = info.getElseBlock();
+		BlockNode thenBlock = info.getThenBlock();
+		BlockNode elseBlock = info.getElseBlock();
+
+		if (Objects.equals(thenBlock, elseBlock)) {
+			IfInfo ifInfo = new IfInfo(info, null, null);
+			ifInfo.setOutBlock(thenBlock);
+			return ifInfo;
+		}
 
 		// select 'then', 'else' and 'exit' blocks
 		if (thenBlock.contains(AFlag.RETURN) && elseBlock.contains(AFlag.RETURN)) {

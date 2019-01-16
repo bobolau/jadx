@@ -1,15 +1,9 @@
 package jadx.gui.utils;
 
-import javax.swing.JLabel;
-import javax.swing.JOptionPane;
-import javax.swing.JTextArea;
-import java.awt.Color;
-import java.awt.Cursor;
-import java.awt.Desktop;
+import javax.swing.*;
+import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
-import java.io.IOException;
-import java.net.URISyntaxException;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -64,9 +58,7 @@ public class Link extends JLabel implements MouseListener {
 				try {
 					desktop.browse(new java.net.URI(url));
 					return;
-				} catch (IOException e) {
-					LOG.debug("Open url error", e);
-				} catch (URISyntaxException e) {
+				} catch (Exception e) {
 					LOG.debug("Open url error", e);
 				}
 			}
@@ -74,16 +66,22 @@ public class Link extends JLabel implements MouseListener {
 		try {
 			String os = System.getProperty("os.name").toLowerCase();
 			if (os.contains("win")) {
-				Runtime.getRuntime().exec("rundll32 url.dll,FileProtocolHandler " + url);
+				new ProcessBuilder()
+						.command(new String[]{"rundll32", "url.dll,FileProtocolHandler", url})
+						.start();
 				return;
 			}
 			if (os.contains("mac")) {
-				Runtime.getRuntime().exec("open " + url);
+				new ProcessBuilder()
+						.command(new String[]{"open", url})
+						.start();
 				return;
 			}
 			Map<String, String> env = System.getenv();
 			if (env.get("BROWSER") != null) {
-				Runtime.getRuntime().exec(env.get("BROWSER") + " " + url);
+				new ProcessBuilder()
+						.command(new String[]{env.get("BROWSER"), url})
+						.start();
 				return;
 			}
 		} catch (Exception e) {

@@ -1,5 +1,8 @@
 package jadx.core.dex.visitors.regions;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import jadx.core.dex.attributes.AFlag;
 import jadx.core.dex.instructions.InsnType;
 import jadx.core.dex.instructions.PhiInsn;
@@ -16,9 +19,6 @@ import jadx.core.dex.regions.Region;
 import jadx.core.dex.regions.conditions.IfRegion;
 import jadx.core.dex.visitors.CodeShrinker;
 import jadx.core.utils.InsnList;
-
-import java.util.HashMap;
-import java.util.Map;
 
 public class TernaryMod {
 
@@ -160,7 +160,7 @@ public class TernaryMod {
 		if (tPhi == null || ePhi == null || tPhi != ePhi) {
 			return false;
 		}
-		Map<Integer, Integer> map = new HashMap<Integer, Integer>(tPhi.getArgsCount());
+		Map<Integer, Integer> map = new HashMap<>(tPhi.getArgsCount());
 		for (InsnArg arg : tPhi.getArguments()) {
 			if (!arg.isRegister()) {
 				continue;

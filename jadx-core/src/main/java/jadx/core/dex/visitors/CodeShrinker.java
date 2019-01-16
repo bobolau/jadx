@@ -1,5 +1,12 @@
 package jadx.core.dex.visitors;
 
+import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Set;
+
 import jadx.core.dex.attributes.AFlag;
 import jadx.core.dex.instructions.InsnType;
 import jadx.core.dex.instructions.args.InsnArg;
@@ -15,13 +22,6 @@ import jadx.core.utils.BlockUtils;
 import jadx.core.utils.EmptyBitSet;
 import jadx.core.utils.InsnList;
 import jadx.core.utils.exceptions.JadxRuntimeException;
-
-import java.util.ArrayList;
-import java.util.BitSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.ListIterator;
-import java.util.Set;
 
 public class CodeShrinker extends AbstractVisitor {
 
@@ -57,7 +57,7 @@ public class CodeShrinker extends AbstractVisitor {
 		}
 
 		public static List<RegisterArg> getArgs(InsnNode insn) {
-			List<RegisterArg> args = new LinkedList<RegisterArg>();
+			List<RegisterArg> args = new LinkedList<>();
 			addArgs(insn, args);
 			return args;
 		}
@@ -89,8 +89,7 @@ public class CodeShrinker extends AbstractVisitor {
 		}
 
 		public WrapInfo checkInline(int assignPos, RegisterArg arg) {
-			if (!arg.isThis()
-					&& (assignPos >= inlineBorder || !canMove(assignPos, inlineBorder))) {
+			if (assignPos >= inlineBorder || !canMove(assignPos, inlineBorder)) {
 				return null;
 			}
 			inlineBorder = assignPos;
@@ -134,8 +133,14 @@ public class CodeShrinker extends AbstractVisitor {
 		}
 
 		private static boolean usedArgAssign(InsnNode insn, BitSet args) {
+			if (args.isEmpty()) {
+				return false;
+			}
 			RegisterArg result = insn.getResult();
-			return result != null && args.get(result.getRegNum());
+			if (result == null || result.isField()) {
+				return false;
+			}
+			return args.get(result.getRegNum());
 		}
 
 		public WrapInfo inline(int assignInsnPos, RegisterArg arg) {
@@ -191,11 +196,11 @@ public class CodeShrinker extends AbstractVisitor {
 		}
 		InsnList insnList = new InsnList(block.getInstructions());
 		int insnCount = insnList.size();
-		List<ArgsInfo> argsList = new ArrayList<ArgsInfo>(insnCount);
+		List<ArgsInfo> argsList = new ArrayList<>(insnCount);
 		for (int i = 0; i < insnCount; i++) {
 			argsList.add(new ArgsInfo(insnList.get(i), argsList, i));
 		}
-		List<WrapInfo> wrapList = new ArrayList<WrapInfo>();
+		List<WrapInfo> wrapList = new ArrayList<>();
 		for (ArgsInfo argsInfo : argsList) {
 			List<RegisterArg> args = argsInfo.getArgs();
 			if (args.isEmpty()) {
@@ -208,9 +213,9 @@ public class CodeShrinker extends AbstractVisitor {
 //					continue;
 //				}
 				SSAVar sVar = arg.getSVar();
-				// allow inline only one use arg or 'this'
+				// allow inline only one use arg
 				if (sVar == null
-						|| sVar.getVariableUseCount() != 1 && !arg.isThis()
+						|| sVar.getVariableUseCount() != 1
 						|| sVar.contains(AFlag.DONT_INLINE)) {
 					continue;
 				}
@@ -255,7 +260,7 @@ public class CodeShrinker extends AbstractVisitor {
 	}
 
 	private static boolean canMoveBetweenBlocks(InsnNode assignInsn, BlockNode assignBlock,
-			BlockNode useBlock, InsnNode useInsn) {
+	                                            BlockNode useBlock, InsnNode useInsn) {
 		if (!BlockUtils.isPathExists(assignBlock, useBlock)) {
 			return false;
 		}
