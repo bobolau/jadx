@@ -5,7 +5,7 @@ import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.BlockNode;
 import jadx.core.dex.nodes.ClassNode;
@@ -13,14 +13,15 @@ import jadx.core.dex.nodes.MethodNode;
 import jadx.core.dex.visitors.ssa.LiveVarAnalysis;
 import jadx.tests.api.IntegrationTest;
 
-import static jadx.tests.api.utils.JadxMatchers.containsOne;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 
 public class TestNameAssign2 extends IntegrationTest {
 
 	public static class TestCls {
 
-		private static void test(MethodNode mth, int regNum, LiveVarAnalysis la) {
+		public static void test(MethodNode mth, int regNum, LiveVarAnalysis la) {
 			List<BlockNode> blocks = mth.getBasicBlocks();
 			int blocksCount = blocks.size();
 			BitSet hasPhi = new BitSet(blocksCount);
@@ -58,7 +59,6 @@ public class TestNameAssign2 extends IntegrationTest {
 		ClassNode cls = getClassNode(TestCls.class);
 		String code = cls.getCode().toString();
 
-		// TODO:
-		assertThat(code, containsOne("int id;"));
+		assertThat(code, not(containsString("int id;")));
 	}
 }

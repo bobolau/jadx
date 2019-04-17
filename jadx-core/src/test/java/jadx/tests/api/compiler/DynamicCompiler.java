@@ -8,11 +8,16 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import jadx.core.dex.nodes.ClassNode;
 
 import static javax.tools.JavaCompiler.CompilationTask;
 
 public class DynamicCompiler {
+
+	private static final Logger LOG = LoggerFactory.getLogger(DynamicCompiler.class);
 
 	private final ClassNode clsNode;
 
@@ -29,6 +34,10 @@ public class DynamicCompiler {
 		String code = clsNode.getCode().toString();
 
 		JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+		if (compiler == null) {
+			LOG.error("Can not find compiler, please use JDK instead");
+			return false;
+		}
 		fileManager = new ClassFileManager(compiler.getStandardFileManager(null, null, null));
 
 		List<JavaFileObject> jFiles = new ArrayList<>(1);
@@ -44,10 +53,7 @@ public class DynamicCompiler {
 
 	private void makeInstance() throws Exception {
 		String fullName = clsNode.getFullName();
-		instance = getClassLoader().loadClass(fullName).newInstance();
-		if (instance == null) {
-			throw new NullPointerException("Instantiation failed");
-		}
+		instance = getClassLoader().loadClass(fullName).getConstructor().newInstance();
 	}
 
 	private Object getInstance() throws Exception {

@@ -2,7 +2,10 @@ package jadx.api;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 public class JadxArgs {
 
@@ -27,12 +30,13 @@ public class JadxArgs {
 	private boolean showInconsistentCode = false;
 
 	private boolean useImports = true;
+	private boolean debugInfo = true;
 
-	private boolean isSkipResources = false;
-	private boolean isSkipSources = false;
+	private boolean skipResources = false;
+	private boolean skipSources = false;
 
-	private boolean isDeobfuscationOn = false;
-	private boolean isDeobfuscationForceSave = false;
+	private boolean deobfuscationOn = false;
+	private boolean deobfuscationForceSave = false;
 	private boolean useSourceNameAsClassAlias = false;
 
 	private int deobfuscationMinLength = 0;
@@ -40,7 +44,14 @@ public class JadxArgs {
 
 	private boolean escapeUnicode = false;
 	private boolean replaceConsts = true;
+	private boolean respectBytecodeAccModifiers = false;
 	private boolean exportAsGradleProject = false;
+
+	private boolean fsCaseSensitive;
+
+	public enum RENAME {CASE, VALID, PRINTABLE}
+
+	private Set<RENAME> renameFlags = EnumSet.allOf(RENAME.class);
 
 	public JadxArgs() {
 		// use default options
@@ -54,6 +65,10 @@ public class JadxArgs {
 
 	public List<File> getInputFiles() {
 		return inputFiles;
+	}
+
+	public void setInputFile(File inputFile) {
+		this.inputFiles = Collections.singletonList(inputFile);
 	}
 
 	public void setInputFiles(List<File> inputFiles) {
@@ -132,36 +147,44 @@ public class JadxArgs {
 		this.useImports = useImports;
 	}
 
+	public boolean isDebugInfo() {
+		return debugInfo;
+	}
+
+	public void setDebugInfo(boolean debugInfo) {
+		this.debugInfo = debugInfo;
+	}
+
 	public boolean isSkipResources() {
-		return isSkipResources;
+		return skipResources;
 	}
 
 	public void setSkipResources(boolean skipResources) {
-		isSkipResources = skipResources;
+		this.skipResources = skipResources;
 	}
 
 	public boolean isSkipSources() {
-		return isSkipSources;
+		return skipSources;
 	}
 
 	public void setSkipSources(boolean skipSources) {
-		isSkipSources = skipSources;
+		this.skipSources = skipSources;
 	}
 
 	public boolean isDeobfuscationOn() {
-		return isDeobfuscationOn;
+		return deobfuscationOn;
 	}
 
 	public void setDeobfuscationOn(boolean deobfuscationOn) {
-		isDeobfuscationOn = deobfuscationOn;
+		this.deobfuscationOn = deobfuscationOn;
 	}
 
 	public boolean isDeobfuscationForceSave() {
-		return isDeobfuscationForceSave;
+		return deobfuscationForceSave;
 	}
 
 	public void setDeobfuscationForceSave(boolean deobfuscationForceSave) {
-		isDeobfuscationForceSave = deobfuscationForceSave;
+		this.deobfuscationForceSave = deobfuscationForceSave;
 	}
 
 	public boolean isUseSourceNameAsClassAlias() {
@@ -204,6 +227,14 @@ public class JadxArgs {
 		this.replaceConsts = replaceConsts;
 	}
 
+	public boolean isRespectBytecodeAccModifiers() {
+		return respectBytecodeAccModifiers;
+	}
+
+	public void setRespectBytecodeAccModifiers(boolean respectBytecodeAccModifiers) {
+		this.respectBytecodeAccModifiers = respectBytecodeAccModifiers;
+	}
+
 	public boolean isExportAsGradleProject() {
 		return exportAsGradleProject;
 	}
@@ -212,30 +243,75 @@ public class JadxArgs {
 		this.exportAsGradleProject = exportAsGradleProject;
 	}
 
+	public boolean isFsCaseSensitive() {
+		return fsCaseSensitive;
+	}
+
+	public void setFsCaseSensitive(boolean fsCaseSensitive) {
+		this.fsCaseSensitive = fsCaseSensitive;
+	}
+
+	public boolean isRenameCaseSensitive() {
+		return renameFlags.contains(RENAME.CASE);
+	}
+
+	public void setRenameCaseSensitive(boolean renameCaseSensitive) {
+		if (renameCaseSensitive && !isRenameCaseSensitive()) {
+			renameFlags.add(RENAME.CASE);
+		} else if (!renameCaseSensitive && isRenameCaseSensitive()) {
+			renameFlags.remove(RENAME.CASE);
+		}
+	}
+
+	public boolean isRenameValid() {
+		return renameFlags.contains(RENAME.VALID);
+	}
+
+	public void setRenameValid(boolean renameValid) {
+		if (renameValid && !isRenameValid()) {
+			renameFlags.add(RENAME.VALID);
+		} else if (!renameValid && isRenameValid()) {
+			renameFlags.remove(RENAME.VALID);
+		}
+	}
+
+	public boolean isRenamePrintable() {
+		return renameFlags.contains(RENAME.PRINTABLE);
+	}
+
+	public void setRenamePrintable(boolean renamePrintable) {
+		if (renamePrintable && !isRenamePrintable()) {
+			renameFlags.add(RENAME.PRINTABLE);
+		} else if (!renamePrintable && isRenamePrintable()) {
+			renameFlags.remove(RENAME.PRINTABLE);
+		}
+	}
+
 	@Override
 	public String toString() {
-		final StringBuilder sb = new StringBuilder("JadxArgs{");
-		sb.append("inputFiles=").append(inputFiles);
-		sb.append(", outDir=").append(outDir);
-		sb.append(", outDirSrc=").append(outDirSrc);
-		sb.append(", outDirRes=").append(outDirRes);
-		sb.append(", threadsCount=").append(threadsCount);
-		sb.append(", cfgOutput=").append(cfgOutput);
-		sb.append(", rawCFGOutput=").append(rawCFGOutput);
-		sb.append(", fallbackMode=").append(fallbackMode);
-		sb.append(", showInconsistentCode=").append(showInconsistentCode);
-		sb.append(", useImports=").append(useImports);
-		sb.append(", isSkipResources=").append(isSkipResources);
-		sb.append(", isSkipSources=").append(isSkipSources);
-		sb.append(", isDeobfuscationOn=").append(isDeobfuscationOn);
-		sb.append(", isDeobfuscationForceSave=").append(isDeobfuscationForceSave);
-		sb.append(", useSourceNameAsClassAlias=").append(useSourceNameAsClassAlias);
-		sb.append(", deobfuscationMinLength=").append(deobfuscationMinLength);
-		sb.append(", deobfuscationMaxLength=").append(deobfuscationMaxLength);
-		sb.append(", escapeUnicode=").append(escapeUnicode);
-		sb.append(", replaceConsts=").append(replaceConsts);
-		sb.append(", exportAsGradleProject=").append(exportAsGradleProject);
-		sb.append('}');
-		return sb.toString();
+		return "JadxArgs{" + "inputFiles=" + inputFiles +
+			       ", outDir=" + outDir +
+			       ", outDirSrc=" + outDirSrc +
+			       ", outDirRes=" + outDirRes +
+			       ", threadsCount=" + threadsCount +
+			       ", cfgOutput=" + cfgOutput +
+			       ", rawCFGOutput=" + rawCFGOutput +
+			       ", fallbackMode=" + fallbackMode +
+			       ", showInconsistentCode=" + showInconsistentCode +
+			       ", useImports=" + useImports +
+			       ", skipResources=" + skipResources +
+			       ", skipSources=" + skipSources +
+			       ", deobfuscationOn=" + deobfuscationOn +
+			       ", deobfuscationForceSave=" + deobfuscationForceSave +
+			       ", useSourceNameAsClassAlias=" + useSourceNameAsClassAlias +
+			       ", deobfuscationMinLength=" + deobfuscationMinLength +
+			       ", deobfuscationMaxLength=" + deobfuscationMaxLength +
+			       ", escapeUnicode=" + escapeUnicode +
+			       ", replaceConsts=" + replaceConsts +
+			       ", respectBytecodeAccModifiers=" + respectBytecodeAccModifiers +
+			       ", exportAsGradleProject=" + exportAsGradleProject +
+			       ", fsCaseSensitive=" + fsCaseSensitive +
+			       ", renameFlags=" + renameFlags +
+			       '}';
 	}
 }

@@ -4,13 +4,24 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import jadx.core.dex.instructions.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import jadx.core.Consts;
+import jadx.core.deobf.NameMapper;
+import jadx.core.dex.attributes.AFlag;
+import jadx.core.dex.info.ClassInfo;
 import jadx.core.dex.info.FieldInfo;
 import jadx.core.dex.info.MethodInfo;
+import jadx.core.dex.instructions.ArithNode;
+import jadx.core.dex.instructions.ArithOp;
+import jadx.core.dex.instructions.CallMthInterface;
+import jadx.core.dex.instructions.ConstStringNode;
+import jadx.core.dex.instructions.IfNode;
+import jadx.core.dex.instructions.IndexInsnNode;
+import jadx.core.dex.instructions.InsnType;
+import jadx.core.dex.instructions.InvokeNode;
+import jadx.core.dex.instructions.InvokeType;
 import jadx.core.dex.instructions.args.ArgType;
 import jadx.core.dex.instructions.args.FieldArg;
 import jadx.core.dex.instructions.args.InsnArg;
@@ -21,6 +32,7 @@ import jadx.core.dex.instructions.mods.TernaryInsn;
 import jadx.core.dex.nodes.BlockNode;
 import jadx.core.dex.nodes.InsnNode;
 import jadx.core.dex.nodes.MethodNode;
+import jadx.core.dex.nodes.RootNode;
 import jadx.core.dex.regions.conditions.IfCondition;
 
 public class SimplifyVisitor extends AbstractVisitor {
@@ -37,13 +49,40 @@ public class SimplifyVisitor extends AbstractVisitor {
 			for (int i = 0; i < list.size(); i++) {
 				InsnNode modInsn = simplifyInsn(mth, list.get(i));
 				if (modInsn != null) {
+					if (i != 0 && modInsn.contains(AFlag.ARITH_ONEARG)) {
+
+						InsnNode mergedNode = simplifyOneArgConsecutive(
+								list.get(i - 1), list.get(i), (ArithNode) modInsn);
+
+						if (mergedNode != null) {
+							list.remove(i - 1);
+							modInsn = mergedNode;
+							i--;
+						}
+					}
 					list.set(i, modInsn);
 				}
 			}
 		}
 	}
 
+	private static InsnNode simplifyOneArgConsecutive(InsnNode insn1, InsnNode insn2, ArithNode modInsn) {
+		if (insn1.getType() == InsnType.IGET
+				&& insn2.getType() == InsnType.IPUT
+				&& insn1.getResult().getSVar().getUseCount() == 2
+				&& insn2.getArg(1).equals(insn1.getResult())) {
+
+			FieldInfo field = (FieldInfo) ((IndexInsnNode) insn2).getIndex();
+			FieldArg fArg = new FieldArg(field, new InsnWrapArg(insn1));
+			return new ArithNode(modInsn.getOp(), fArg, modInsn.getArg(1));
+		}
+		return null;
+	}
+
 	private static InsnNode simplifyInsn(MethodNode mth, InsnNode insn) {
+		if (insn.contains(AFlag.DONT_GENERATE)) {
+			return null;
+		}
 		for (InsnArg arg : insn.getArguments()) {
 			if (arg.isInsnWrap()) {
 				InsnNode ni = simplifyInsn(mth, ((InsnWrapArg) arg).getWrapInsn());
@@ -54,7 +93,7 @@ public class SimplifyVisitor extends AbstractVisitor {
 		}
 		switch (insn.getType()) {
 			case ARITH:
-				return simplifyArith(insn);
+				return simplifyArith((ArithNode) insn);
 
 			case IF:
 				simplifyIf((IfNode) insn);
@@ -64,7 +103,7 @@ public class SimplifyVisitor extends AbstractVisitor {
 				break;
 
 			case INVOKE:
-				return convertInvoke(mth, insn);
+				return convertInvoke(mth, (InvokeNode) insn);
 
 			case IPUT:
 			case SPUT:
@@ -84,10 +123,53 @@ public class SimplifyVisitor extends AbstractVisitor {
 				}
 				break;
 
+			case CONSTRUCTOR:
+				simplfyConstructor(mth.root(), (ConstructorInsn) insn);
+				break;
+
 			default:
 				break;
 		}
 		return null;
+	}
+
+	private static void simplfyConstructor(RootNode root, ConstructorInsn insn) {
+		if (insn.getArgsCount() != 0
+				&& insn.getCallMth().getDeclClass().getType().equals(ArgType.STRING)) {
+			InsnArg arg = insn.getArg(0);
+			InsnNode node = arg.isInsnWrap()
+					? ((InsnWrapArg) arg).getWrapInsn()
+					: insn;
+		    if (node.getArgsCount() != 0) {
+		    	ArgType argType = node.getArg(0).getType();
+		    	if (node.getType() == InsnType.FILLED_NEW_ARRAY
+		    			&& (argType == ArgType.BYTE || argType == ArgType.CHAR)) {
+		    		int printable = 0;
+		    		byte[] arr = new byte[node.getArgsCount()];
+		    		for (int i = 0; i < arr.length; i++) {
+		    			arr[i] = (byte) ((LiteralArg) node.getArg(i)).getLiteral();
+		    			if (NameMapper.isPrintableChar(arr[i])) {
+		    				printable++;
+		    			}
+		    		}
+		    		if (printable >= arr.length - printable) {
+		    			InsnWrapArg wa = new InsnWrapArg(new ConstStringNode(new String(arr)));
+		    			if (insn.getArgsCount() == 1) {
+		    				insn.setArg(0, wa);
+		    			} else {
+		    				MethodInfo mi = MethodInfo.externalMth(
+		    						ClassInfo.fromType(root, ArgType.STRING),
+		    						"getBytes",
+		    						Collections.emptyList(),
+		    						ArgType.array(ArgType.BYTE));
+		    				InvokeNode in = new InvokeNode(mi, InvokeType.VIRTUAL, 1);
+		    				in.addArg(wa);
+		    				insn.setArg(0, new InsnWrapArg(in));
+		    			}
+		    		}
+		    	}
+		    }
+		}
 	}
 
 	private static InsnNode processCast(MethodNode mth, InsnNode insn) {
@@ -151,8 +233,8 @@ public class SimplifyVisitor extends AbstractVisitor {
 	 * @param insn
 	 * @return
 	 */
-	private static InsnNode convertInvoke(MethodNode mth, InsnNode insn) {
-		MethodInfo callMth = ((InvokeNode) insn).getCallMth();
+	private static InsnNode convertInvoke(MethodNode mth, InvokeNode insn) {
+		MethodInfo callMth = insn.getCallMth();
 
 		// If this is a 'new StringBuilder(xxx).append(yyy).append(zzz).toString(),
 		// convert it to STRING_CONCAT pseudo instruction.
@@ -179,7 +261,8 @@ public class SimplifyVisitor extends AbstractVisitor {
 				if (constrIndex != -1) {  // If we found a CONSTRUCTOR, is it a StringBuilder?
 					ConstructorInsn constr = (ConstructorInsn) chain.get(constrIndex);
 					if (constr.getClassType().getFullName().equals(Consts.CLASS_STRING_BUILDER)) {
-						int len = chain.size(), argInd = 1;
+						int len = chain.size();
+						int argInd = 1;
 						InsnNode concatInsn = new InsnNode(InsnType.STR_CONCAT, len - 1);
 						InsnNode argInsn;
 						if (constrIndex > 0) {  // There was an arg to the StringBuilder constr
@@ -225,8 +308,7 @@ public class SimplifyVisitor extends AbstractVisitor {
 		return null;
 	}
 
-	private static InsnNode simplifyArith(InsnNode insn) {
-		ArithNode arith = (ArithNode) insn;
+	private static InsnNode simplifyArith(ArithNode arith) {
 		if (arith.getArgsCount() != 2) {
 			return null;
 		}
@@ -245,8 +327,16 @@ public class SimplifyVisitor extends AbstractVisitor {
 			// fix 'c + (-1)' => 'c - (1)'
 			if (arith.getOp() == ArithOp.ADD && lit < 0) {
 				return new ArithNode(ArithOp.SUB,
-						arith.getResult(), insn.getArg(0),
+						arith.getResult(), arith.getArg(0),
 						InsnArg.lit(-lit, litArg.getType()));
+			}
+			InsnArg firstArg = arith.getArg(0);
+			if (arith.getOp() == ArithOp.XOR && firstArg.getType() == ArgType.BOOLEAN
+					&& (lit == 0 || lit == 1)) {
+				InsnNode node = new InsnNode(lit == 0 ? InsnType.MOVE : InsnType.NOT, 1);
+				node.setResult(arith.getResult());
+				node.addArg(firstArg);
+				return node;
 			}
 		}
 		return null;
@@ -287,20 +377,16 @@ public class SimplifyVisitor extends AbstractVisitor {
 				}
 			}
 			FieldArg fArg = new FieldArg(field, reg);
-			if (reg != null) {
-				fArg.setType(get.getArg(0).getType());
-			}
 			if (wrapType == InsnType.ARITH) {
 				ArithNode ar = (ArithNode) wrap;
 				return new ArithNode(ar.getOp(), fArg, ar.getArg(1));
-			} else {
-				int argsCount = wrap.getArgsCount();
-				InsnNode concat = new InsnNode(InsnType.STR_CONCAT, argsCount - 1);
-				for (int i = 1; i < argsCount; i++) {
-					concat.addArg(wrap.getArg(i));
-				}
-				return new ArithNode(ArithOp.ADD, fArg, InsnArg.wrapArg(concat));
 			}
+			int argsCount = wrap.getArgsCount();
+			InsnNode concat = new InsnNode(InsnType.STR_CONCAT, argsCount - 1);
+			for (int i = 1; i < argsCount; i++) {
+				concat.addArg(wrap.getArg(i));
+			}
+			return new ArithNode(ArithOp.ADD, fArg, InsnArg.wrapArg(concat));
 		} catch (Exception e) {
 			LOG.debug("Can't convert field arith insn: {}, mth: {}", insn, mth, e);
 		}

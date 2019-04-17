@@ -2,13 +2,13 @@ package jadx.tests.integration.trycatch;
 
 import java.io.File;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
 import static jadx.tests.api.utils.JadxMatchers.containsOne;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class TestInlineInCatch extends IntegrationTest {
 
@@ -19,6 +19,9 @@ public class TestInlineInCatch extends IntegrationTest {
 			File output = null;
 			try {
 				output = File.createTempFile("f", "a", dir);
+				if (!output.exists()) {
+					return 1;
+				}
 				return 0;
 			} catch (Exception e) {
 				if (output != null) {

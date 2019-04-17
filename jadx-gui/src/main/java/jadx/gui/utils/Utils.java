@@ -7,7 +7,10 @@ import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.Transferable;
 import java.io.InputStream;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +29,16 @@ public class Utils {
 
 	public static final Font FONT_HACK = openFontTTF("Hack-Regular");
 
+	/**
+	 * The minimum about of memory in bytes we are trying to keep free, otherwise the application may run out of heap
+	 * which ends up in a Java garbage collector running "amok" (CPU utilization 100% for each core and the UI is
+	 * not responsive).
+	 * <p>
+	 * We can calculate and store this value here as the maximum heap is fixed for each JVM instance
+	 * and can't be changed at runtime.
+	 */
+	public static final long MIN_FREE_MEMORY = calculateMinFreeMemory();
+
 	private Utils() {
 	}
 
@@ -36,6 +49,14 @@ public class Utils {
 			throw new JadxRuntimeException("Icon not found: " + iconPath);
 		}
 		return new ImageIcon(resource);
+	}
+
+	public static Image openImage(String path) {
+		URL resource = Utils.class.getResource(path);
+		if (resource == null) {
+			throw new JadxRuntimeException("Image not found: " + path);
+		}
+		return Toolkit.getDefaultToolkit().createImage(resource);
 	}
 
 	@Nullable
@@ -107,31 +128,37 @@ public class Utils {
 		return overIcon;
 	}
 
+	/**
+	 * @return 20% of the maximum heap size limited to 512 MB (bytes)
+	 */
+	public static long calculateMinFreeMemory() {
+		Runtime runtime = Runtime.getRuntime();
+		long minFree = (long) (runtime.maxMemory() * 0.2);
+		return Math.min(minFree, 512 * 1024L * 1024L);
+	}
+
 	public static boolean isFreeMemoryAvailable() {
 		Runtime runtime = Runtime.getRuntime();
 		long maxMemory = runtime.maxMemory();
-		long totalFree = runtime.freeMemory() + maxMemory - runtime.totalMemory();
-		return totalFree > maxMemory * 0.2;
+		long totalFree = runtime.freeMemory() + (maxMemory - runtime.totalMemory());
+		return totalFree > MIN_FREE_MEMORY;
 	}
 
 	public static String memoryInfo() {
 		Runtime runtime = Runtime.getRuntime();
-		StringBuilder sb = new StringBuilder();
 		long maxMemory = runtime.maxMemory();
 		long allocatedMemory = runtime.totalMemory();
 		long freeMemory = runtime.freeMemory();
 
-		sb.append("heap: ").append(format(allocatedMemory - freeMemory));
-		sb.append(", allocated: ").append(format(allocatedMemory));
-		sb.append(", free: ").append(format(freeMemory));
-		sb.append(", total free: ").append(format(freeMemory + maxMemory - allocatedMemory));
-		sb.append(", max: ").append(format(maxMemory));
-
-		return sb.toString();
+		return "heap: " + format(allocatedMemory - freeMemory) +
+				", allocated: " + format(allocatedMemory) +
+				", free: " + format(freeMemory) +
+				", total free: " + format(freeMemory + maxMemory - allocatedMemory) +
+				", max: " + format(maxMemory);
 	}
 
 	private static String format(long mem) {
-		return Long.toString((long) (mem / 1024. / 1024.)) + "MB";
+		return (long) (mem / (double) (1024L * 1024L)) + "MB";
 	}
 
 	/**
@@ -150,5 +177,29 @@ public class Utils {
 		} catch (Exception e) {
 			LOG.error("Failed copy string '{}' to clipboard", text, e);
 		}
+	}
+
+	@NotNull
+	public static String getFontStyleName(int style) {
+		if (style == 0) {
+			return "plain";
+		}
+		StringBuilder sb = new StringBuilder();
+		if ((style & Font.BOLD) != 0) {
+			sb.append("bold");
+		}
+		if ((style & Font.ITALIC) != 0) {
+			sb.append(" italic");
+		}
+		return sb.toString().trim();
+	}
+
+	public static void setWindowIcons(Window window) {
+		List<Image> icons = new ArrayList<>();
+		icons.add(Utils.openImage("/logos/jadx-logo-16px.png"));
+		icons.add(Utils.openImage("/logos/jadx-logo-32px.png"));
+		icons.add(Utils.openImage("/logos/jadx-logo-48px.png"));
+		icons.add(Utils.openImage("/logos/jadx-logo.png"));
+		window.setIconImages(icons);
 	}
 }

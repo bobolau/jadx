@@ -4,15 +4,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
 import static jadx.tests.api.utils.JadxMatchers.containsOne;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
-import static org.junit.Assert.assertThat;
 
 public class TestFieldInit extends IntegrationTest {
 
@@ -21,11 +21,11 @@ public class TestFieldInit extends IntegrationTest {
 		public class A {
 		}
 
-		private static List<String> s = new ArrayList<>();
+		public static List<String> s = new ArrayList<>();
 
-		private A a = new A();
-		private int i =  1 + Random.class.getSimpleName().length();
-		private int n = 0;
+		public A a = new A();
+		public int i = 1 + Random.class.getSimpleName().length();
+		public int n = 0;
 
 		public TestCls(int z) {
 			this.n = z;

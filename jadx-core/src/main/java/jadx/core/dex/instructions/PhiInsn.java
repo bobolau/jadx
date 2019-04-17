@@ -11,7 +11,7 @@ import jadx.core.dex.instructions.args.InsnArg;
 import jadx.core.dex.instructions.args.RegisterArg;
 import jadx.core.dex.nodes.BlockNode;
 import jadx.core.dex.nodes.InsnNode;
-import jadx.core.utils.InstructionRemover;
+import jadx.core.utils.InsnRemover;
 import jadx.core.utils.Utils;
 import jadx.core.utils.exceptions.JadxRuntimeException;
 
@@ -24,10 +24,11 @@ public final class PhiInsn extends InsnNode {
 		this.blockBinds = new LinkedHashMap<>(predecessors);
 		setResult(InsnArg.reg(regNum, ArgType.UNKNOWN));
 		add(AFlag.DONT_INLINE);
+		add(AFlag.DONT_GENERATE);
 	}
 
 	public RegisterArg bindArg(BlockNode pred) {
-		RegisterArg arg = InsnArg.reg(getResult().getRegNum(), getResult().getType());
+		RegisterArg arg = InsnArg.reg(getResult().getRegNum(), getResult().getInitType());
 		bindArg(arg, pred);
 		return arg;
 	}
@@ -62,7 +63,8 @@ public final class PhiInsn extends InsnNode {
 		RegisterArg reg = (RegisterArg) arg;
 		if (super.removeArg(reg)) {
 			blockBinds.remove(reg);
-			InstructionRemover.fixUsedInPhiFlag(reg);
+			reg.getSVar().removeUse(reg);
+			InsnRemover.fixUsedInPhiFlag(reg);
 			return true;
 		}
 		return false;
@@ -78,7 +80,9 @@ public final class PhiInsn extends InsnNode {
 			throw new JadxRuntimeException("Unknown predecessor block by arg " + from + " in PHI: " + this);
 		}
 		if (removeArg(from)) {
-			bindArg((RegisterArg) to, pred);
+			RegisterArg reg = (RegisterArg) to;
+			bindArg(reg, pred);
+			reg.getSVar().setUsedInPhi(this);
 		}
 		return true;
 	}

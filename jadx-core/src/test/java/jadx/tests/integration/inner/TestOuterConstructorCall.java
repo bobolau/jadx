@@ -1,13 +1,13 @@
 package jadx.tests.integration.inner;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
-import static org.junit.Assert.assertThat;
 
 public class TestOuterConstructorCall extends IntegrationTest {
 
@@ -17,6 +17,7 @@ public class TestOuterConstructorCall extends IntegrationTest {
 		}
 
 		private class Inner {
+			@SuppressWarnings("unused")
 			private TestCls test() {
 				return new TestCls(this);
 			}

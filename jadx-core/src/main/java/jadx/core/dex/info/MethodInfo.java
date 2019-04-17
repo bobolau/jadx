@@ -33,6 +33,21 @@ public final class MethodInfo {
 		shortId = makeSignature(true);
 	}
 
+	private MethodInfo(ClassInfo declClass, String name, List<ArgType> args, ArgType retType) {
+		this.name = name;
+		alias = name;
+		aliasFromPreset = false;
+		this.declClass = declClass;
+
+		this.args = args;
+		this.retType = retType;
+		shortId = makeSignature(true);
+	}
+
+	public static MethodInfo externalMth(ClassInfo declClass, String name, List<ArgType> args, ArgType retType) {
+		return new MethodInfo(declClass, name, args, retType);
+	}
+
 	public static MethodInfo fromDex(DexNode dex, int mthIndex) {
 		MethodInfo mth = dex.root().getInfoStorage().getMethod(dex, mthIndex);
 		if (mth != null) {
@@ -43,8 +58,12 @@ public final class MethodInfo {
 	}
 
 	public String makeSignature(boolean includeRetType) {
+		return makeSignature(false, includeRetType);
+	}
+
+	public String makeSignature(boolean useAlias, boolean includeRetType) {
 		StringBuilder signature = new StringBuilder();
-		signature.append(name);
+		signature.append(useAlias ? alias : name);
 		signature.append('(');
 		for (ArgType arg : args) {
 			signature.append(TypeGen.signature(arg));
@@ -61,15 +80,15 @@ public final class MethodInfo {
 	}
 
 	public String getFullName() {
-		return declClass.getFullName() + "." + name;
+		return declClass.getFullName() + '.' + name;
 	}
 
 	public String getFullId() {
-		return declClass.getFullName() + "." + shortId;
+		return declClass.getFullName() + '.' + shortId;
 	}
 
 	public String getRawFullId() {
-		return declClass.makeRawFullName() + "." + shortId;
+		return declClass.makeRawFullName() + '.' + shortId;
 	}
 
 	/**
@@ -147,7 +166,7 @@ public final class MethodInfo {
 
 	@Override
 	public String toString() {
-		return declClass.getFullName() + "." + name
-				+ "(" + Utils.listToString(args) + "):" + retType;
+		return declClass.getFullName() + '.' + name
+				+ '(' + Utils.listToString(args) + "):" + retType;
 	}
 }

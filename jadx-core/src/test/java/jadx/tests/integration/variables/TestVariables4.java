@@ -3,18 +3,18 @@ package jadx.tests.integration.variables;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
 import static org.hamcrest.CoreMatchers.containsString;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class TestVariables4 extends IntegrationTest {
 
 	public static class TestCls {
-		private static boolean runTest(String clsName) {
+		public static boolean runTest(String clsName) {
 			try {
 				boolean pass = false;
 				String msg = null;
@@ -37,7 +37,7 @@ public class TestVariables4 extends IntegrationTest {
 					msg = "not extends AbstractTest";
 				}
 				System.err.println(">> "
-						+ (pass ? "PASS" : "FAIL") + "\t"
+						+ (pass ? "PASS" : "FAIL") + '\t'
 						+ clsName
 						+ (msg == null ? "" : "\t - " + msg));
 				if (exc != null) {

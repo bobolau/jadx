@@ -22,7 +22,7 @@ import jadx.core.dex.nodes.InsnNode;
 import jadx.core.dex.nodes.MethodNode;
 import jadx.core.dex.nodes.parser.FieldInitAttr;
 import jadx.core.utils.BlockUtils;
-import jadx.core.utils.InstructionRemover;
+import jadx.core.utils.InsnRemover;
 import jadx.core.utils.exceptions.JadxException;
 
 @JadxVisitor(
@@ -51,7 +51,8 @@ public class ExtractFieldInit extends AbstractVisitor {
 		MethodNode clinit = cls.getClassInitMth();
 		if (clinit == null
 				|| !clinit.getAccessFlags().isStatic()
-				|| clinit.isNoCode()) {
+				|| clinit.isNoCode()
+				|| clinit.getBasicBlocks() == null) {
 			return;
 		}
 
@@ -92,7 +93,11 @@ public class ExtractFieldInit extends AbstractVisitor {
 				if (initInsns.size() == 1) {
 					InsnNode insn = initInsns.get(0);
 					if (checkInsn(insn)) {
-						InstructionRemover.remove(classInitMth, insn);
+						InsnArg arg = insn.getArg(0);
+						if (arg instanceof InsnWrapArg) {
+							((InsnWrapArg) arg).getWrapInsn().add(AFlag.DECLARE_VAR);
+						}
+						InsnRemover.remove(classInitMth, insn);
 						addFieldInitAttr(classInitMth, field, insn);
 					}
 				}
@@ -165,7 +170,11 @@ public class ExtractFieldInit extends AbstractVisitor {
 		// all checks passed
 		for (InitInfo info : infoList) {
 			for (InsnNode putInsn : info.getPutInsns()) {
-				InstructionRemover.remove(info.getConstrMth(), putInsn);
+				InsnArg arg = putInsn.getArg(0);
+				if (arg instanceof InsnWrapArg) {
+					((InsnWrapArg) arg).getWrapInsn().add(AFlag.DECLARE_VAR);
+				}
+				InsnRemover.remove(info.getConstrMth(), putInsn);
 			}
 		}
 		for (InsnNode insn : common.getPutInsns()) {
@@ -227,7 +236,7 @@ public class ExtractFieldInit extends AbstractVisitor {
 	}
 
 	private static List<InsnNode> getFieldAssigns(MethodNode mth, FieldNode field, InsnType putInsn) {
-		if (mth.isNoCode()) {
+		if (mth.isNoCode() || mth.getBasicBlocks() == null) {
 			return Collections.emptyList();
 		}
 		List<InsnNode> assignInsns = new ArrayList<>();

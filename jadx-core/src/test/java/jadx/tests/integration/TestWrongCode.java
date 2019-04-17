@@ -1,6 +1,6 @@
 package jadx.tests.integration;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
@@ -9,17 +9,18 @@ import static jadx.tests.api.utils.JadxMatchers.containsLines;
 import static jadx.tests.api.utils.JadxMatchers.containsOne;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.not;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class TestWrongCode extends IntegrationTest {
 
 	public static class TestCls {
-		private int test() {
+		@SuppressWarnings("null")
+		public int test() {
 			int[] a = null;
 			return a.length;
 		}
 
-		private int test2(int a) {
+		public int test2(int a) {
 			if (a == 0) {
 			}
 			return a;

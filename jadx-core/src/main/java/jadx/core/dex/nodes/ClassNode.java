@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 
 import jadx.core.Consts;
 import jadx.core.codegen.CodeWriter;
+import jadx.core.dex.attributes.AFlag;
 import jadx.core.dex.attributes.annotations.Annotation;
 import jadx.core.dex.attributes.nodes.LineAttrNode;
 import jadx.core.dex.attributes.nodes.SourceFileAttr;
@@ -33,17 +34,18 @@ import jadx.core.dex.nodes.parser.AnnotationsParser;
 import jadx.core.dex.nodes.parser.FieldInitAttr;
 import jadx.core.dex.nodes.parser.SignatureParser;
 import jadx.core.dex.nodes.parser.StaticValuesParser;
+import jadx.core.utils.RegionUtils;
 import jadx.core.utils.exceptions.DecodeException;
 import jadx.core.utils.exceptions.JadxRuntimeException;
 
 import static jadx.core.dex.nodes.ProcessState.UNLOADED;
 
-public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
+public class ClassNode extends LineAttrNode implements ILoadable, ICodeNode {
 	private static final Logger LOG = LoggerFactory.getLogger(ClassNode.class);
 
 	private final DexNode dex;
 	private final ClassInfo clsInfo;
-	private final AccessInfo accessFlags;
+	private AccessInfo accessFlags;
 	private ArgType superClass;
 	private List<ArgType> interfaces;
 	private Map<ArgType, List<ArgType>> genericMap;
@@ -123,7 +125,7 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 				accFlagsValue = cls.getAccessFlags();
 			}
 			this.accessFlags = new AccessInfo(accFlagsValue, AFType.CLASS);
-
+			markAnonymousClass();
 			buildCache();
 		} catch (Exception e) {
 			throw new JadxRuntimeException("Error decode class: " + clsInfo, e);
@@ -230,7 +232,7 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 				return;
 			}
 			if (fileName.contains("$")
-					&& fileName.endsWith("$" + name)) {
+					&& fileName.endsWith('$' + name)) {
 				return;
 			}
 			ClassInfo parentClass = clsInfo.getTopParentClass();
@@ -321,6 +323,15 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 		return null;
 	}
 
+	public FieldNode searchFieldByNameAndType(FieldInfo field) {
+		for (FieldNode f : fields) {
+			if (f.getFieldInfo().equalsNameAndType(field)) {
+				return f;
+			}
+		}
+		return null;
+	}
+
 	public FieldNode searchFieldByName(String name) {
 		for (FieldNode f : fields) {
 			if (f.getName().equals(name)) {
@@ -334,7 +345,7 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 		return mthInfoMap.get(mth);
 	}
 
-	public MethodNode searchMethodByName(String shortId) {
+	public MethodNode searchMethodByShortId(String shortId) {
 		for (MethodNode m : methods) {
 			if (m.getMethodInfo().getShortId().equals(shortId)) {
 				return m;
@@ -343,8 +354,22 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 		return null;
 	}
 
+	/**
+	 * Return first method by original short name
+	 * Note: methods are not unique by name (class can have several methods with same name but different signature)
+	 */
+	@Nullable
+	public MethodNode searchMethodByShortName(String name) {
+		for (MethodNode m : methods) {
+			if (m.getMethodInfo().getName().equals(name)) {
+				return m;
+			}
+		}
+		return null;
+	}
+
 	public MethodNode searchMethodById(int id) {
-		return searchMethodByName(MethodInfo.fromDex(dex, id).getShortId());
+		return searchMethodByShortId(MethodInfo.fromDex(dex, id).getShortId());
 	}
 
 	public ClassNode getParentClass() {
@@ -379,15 +404,46 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 				&& getSuperClass().getObject().equals(ArgType.ENUM.getObject());
 	}
 
+	public boolean markAnonymousClass() {
+		if (isAnonymous() || isLambdaCls()) {
+			add(AFlag.ANONYMOUS_CLASS);
+			add(AFlag.DONT_GENERATE);
+
+			for (MethodNode mth : getMethods()) {
+				if (mth.isConstructor()) {
+					mth.add(AFlag.ANONYMOUS_CONSTRUCTOR);
+				}
+			}
+			return true;
+		}
+		return false;
+	}
+
 	public boolean isAnonymous() {
 		return clsInfo.isInner()
-				&& clsInfo.getAlias().getShortName().startsWith(Consts.ANONYMOUS_CLASS_PREFIX)
-				&& getDefaultConstructor() != null;
+				&& Character.isDigit(clsInfo.getShortName().charAt(0))
+				&& methods.stream().filter(MethodNode::isConstructor).count() == 1;
+	}
+
+	public boolean isLambdaCls() {
+		return accessFlags.isSynthetic() && accessFlags.isFinal()
+				&& clsInfo.getType().getObject().contains(".-$$Lambda$")
+				&& countStaticFields() == 0;
+	}
+
+	private int countStaticFields() {
+		int c = 0;
+		for (FieldNode field : fields) {
+			if (field.getAccessFlags().isStatic()) {
+				c++;
+			}
+		}
+		return c;
 	}
 
 	@Nullable
 	public MethodNode getClassInitMth() {
-		return searchMethodByName("<clinit>()V");
+		return searchMethodByShortId("<clinit>()V");
 	}
 
 	@Nullable
@@ -400,8 +456,14 @@ public class ClassNode extends LineAttrNode implements ILoadable, IDexNode {
 		return null;
 	}
 
+	@Override
 	public AccessInfo getAccessFlags() {
 		return accessFlags;
+	}
+
+	@Override
+	public void setAccessFlags(AccessInfo accessFlags) {
+		this.accessFlags = accessFlags;
 	}
 
 	@Override

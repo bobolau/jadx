@@ -2,6 +2,8 @@ package jadx.gui;
 
 import javax.swing.*;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -10,10 +12,12 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import jadx.api.JadxArgs;
 import jadx.api.JadxDecompiler;
 import jadx.api.JavaClass;
 import jadx.api.JavaPackage;
 import jadx.api.ResourceFile;
+import jadx.core.utils.files.FileUtils;
 import jadx.gui.settings.JadxSettings;
 
 public class JadxWrapper {
@@ -30,36 +34,37 @@ public class JadxWrapper {
 	public void openFile(File file) {
 		this.openFile = file;
 		try {
-			this.decompiler = new JadxDecompiler(settings.toJadxArgs());
-			this.decompiler.getArgs().setInputFiles(Collections.singletonList(file));
+			JadxArgs jadxArgs = settings.toJadxArgs();
+			jadxArgs.setInputFile(file);
+			// output folder not known yet => use input dir as a best choice
+			jadxArgs.setFsCaseSensitive(FileUtils.isCaseSensitiveFS(file.getParentFile()));
+
+			this.decompiler = new JadxDecompiler(jadxArgs);
 			this.decompiler.load();
 		} catch (Exception e) {
-			LOG.error("Error load file: {}", file, e);
+			LOG.error("Jadx init error", e);
 		}
 	}
 
 	public void saveAll(final File dir, final ProgressMonitor progressMonitor) {
-		Runnable save = new Runnable() {
-			@Override
-			public void run() {
-				try {
-					decompiler.getArgs().setRootDir(dir);
-					ThreadPoolExecutor ex = (ThreadPoolExecutor) decompiler.getSaveExecutor();
-					ex.shutdown();
-					while (ex.isTerminating()) {
-						long total = ex.getTaskCount();
-						long done = ex.getCompletedTaskCount();
-						progressMonitor.setProgress((int) (done * 100.0 / (double) total));
-						Thread.sleep(500);
-					}
-					progressMonitor.close();
-					LOG.info("decompilation complete, freeing memory ...");
-					decompiler.getClasses().forEach(JavaClass::unload);
-					LOG.info("done");
-				} catch (InterruptedException e) {
-					LOG.error("Save interrupted", e);
-					Thread.currentThread().interrupt();
+		Runnable save = () -> {
+			try {
+				decompiler.getArgs().setRootDir(dir);
+				ThreadPoolExecutor ex = (ThreadPoolExecutor) decompiler.getSaveExecutor();
+				ex.shutdown();
+				while (ex.isTerminating()) {
+					long total = ex.getTaskCount();
+					long done = ex.getCompletedTaskCount();
+					progressMonitor.setProgress((int) (done * 100.0 / total));
+					Thread.sleep(500);
 				}
+				progressMonitor.close();
+				LOG.info("decompilation complete, freeing memory ...");
+				decompiler.getClasses().forEach(JavaClass::unload);
+				LOG.info("done");
+			} catch (InterruptedException e) {
+				LOG.error("Save interrupted", e);
+				Thread.currentThread().interrupt();
 			}
 		};
 		new Thread(save).start();
@@ -67,7 +72,6 @@ public class JadxWrapper {
 
 	/**
 	 * Get the complete list of classes
-	 * @return
 	 */
 	public List<JavaClass> getClasses() {
 		return decompiler.getClasses();
@@ -75,22 +79,45 @@ public class JadxWrapper {
 
 	/**
 	 * Get all classes that are not excluded by the excluded packages settings
-	 * @return
 	 */
 	public List<JavaClass> getIncludedClasses() {
 		List<JavaClass> classList = decompiler.getClasses();
-		String excludedPackages = settings.getExcludedPackages().trim();
-		if (excludedPackages.length() == 0)
+		List<String> excludedPackages = getExcludedPackages();
+		if (excludedPackages.isEmpty()) {
 			return classList;
-		String[] excluded = excludedPackages.split("[ ]+");
+		}
 
 		return classList.stream().filter(cls -> {
-			for (String exclude : excluded) {
-				if (cls.getFullName().startsWith(exclude))
+			for (String exclude : excludedPackages) {
+				if (cls.getFullName().equals(exclude)
+						|| cls.getFullName().startsWith(exclude + '.')) {
 					return false;
+				}
 			}
 			return true;
 		}).collect(Collectors.toList());
+	}
+
+	// TODO: move to CLI and filter classes in JadxDecompiler
+	public List<String> getExcludedPackages() {
+		String excludedPackages = settings.getExcludedPackages().trim();
+		if (excludedPackages.isEmpty()) {
+			return Collections.emptyList();
+		}
+		return Arrays.asList(excludedPackages.split("[ ]+"));
+	}
+
+	public void addExcludedPackage(String packageToExclude) {
+		String newExclusion = settings.getExcludedPackages() + ' ' + packageToExclude;
+		settings.setExcludedPackages(newExclusion.trim());
+		settings.sync();
+	}
+
+	public void removeExcludedPackage(String packageToRemoveFromExclusion) {
+		List<String> list = new ArrayList<>(getExcludedPackages());
+		list.remove(packageToRemoveFromExclusion);
+		settings.setExcludedPackages(String.join(" ", list));
+		settings.sync();
 	}
 
 	public List<JavaPackage> getPackages() {
@@ -105,7 +132,7 @@ public class JadxWrapper {
 		return openFile;
 	}
 
-	public JadxSettings getSettings() {
-		return settings;
+	public JadxArgs getArgs() {
+		return decompiler.getArgs();
 	}
 }

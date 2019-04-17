@@ -1,17 +1,18 @@
 package jadx.tests.integration.inner;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
 import static jadx.tests.api.utils.JadxMatchers.containsOne;
 import static jadx.tests.api.utils.JadxMatchers.countString;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class TestAnonymousClass4 extends IntegrationTest {
 
 	public static class TestCls {
+		@SuppressWarnings("unused")
 		public static class Inner {
 			private int f;
 			private double d;
@@ -37,9 +38,9 @@ public class TestAnonymousClass4 extends IntegrationTest {
 		String code = cls.getCode().toString();
 
 		assertThat(code, containsOne(indent(3) + "new Thread() {"));
-		assertThat(code, containsOne(indent(4) + "{"));
+		assertThat(code, containsOne(indent(4) + '{'));
 		assertThat(code, containsOne("f = 1;"));
-		assertThat(code, countString(2, indent(4) + "}"));
+		assertThat(code, countString(2, indent(4) + '}'));
 		assertThat(code, containsOne(indent(4) + "public void run() {"));
 		assertThat(code, containsOne("d = 7.5"));
 		assertThat(code, containsOne(indent(3) + "}.start();"));

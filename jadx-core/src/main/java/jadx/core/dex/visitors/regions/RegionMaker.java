@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 
 import org.slf4j.Logger;
@@ -40,7 +41,7 @@ import jadx.core.dex.trycatch.SplitterBlockAttr;
 import jadx.core.dex.trycatch.TryCatchBlock;
 import jadx.core.utils.BlockUtils;
 import jadx.core.utils.ErrorsCounter;
-import jadx.core.utils.InstructionRemover;
+import jadx.core.utils.InsnRemover;
 import jadx.core.utils.RegionUtils;
 import jadx.core.utils.exceptions.JadxRuntimeException;
 
@@ -75,7 +76,7 @@ public class RegionMaker {
 
 		int startBlockId = startBlock.getId();
 		if (processedBlocks.get(startBlockId)) {
-			mth.addWarn("Removed duplicated region for block: " + startBlock + " " + startBlock.getAttributesString());
+			mth.addWarn("Removed duplicated region for block: " + startBlock + ' ' + startBlock.getAttributesString());
 			return r;
 		}
 		processedBlocks.set(startBlockId);
@@ -115,8 +116,8 @@ public class RegionMaker {
 			}
 		}
 
-		if (!processed && block.getInstructions().size() == 1) {
-			InsnNode insn = block.getInstructions().get(0);
+		InsnNode insn = BlockUtils.getLastInsn(block);
+		if (!processed && insn != null) {
 			switch (insn.getType()) {
 				case IF:
 					next = processIf(r, block, (IfNode) insn, stack);
@@ -192,7 +193,7 @@ public class RegionMaker {
 				// add 'break' instruction before path cross between main loop exit and sub-exit
 				for (Edge exitEdge : loop.getExitEdges()) {
 					if (exitBlocks.contains(exitEdge.getSource())) {
-						insertBreak(stack, loopExit, exitEdge);
+						insertLoopBreak(stack, loop, loopExit, exitEdge);
 					}
 				}
 			}
@@ -203,13 +204,13 @@ public class RegionMaker {
 			BlockNode thenBlock = condInfo.getThenBlock();
 			out = thenBlock == loopStart ? condInfo.getElseBlock() : thenBlock;
 			loopStart.remove(AType.LOOP);
-			loop.getEnd().add(AFlag.SKIP);
+			loop.getEnd().add(AFlag.ADDED_TO_REGION);
 			stack.addExit(loop.getEnd());
 			processedBlocks.clear(loopStart.getId());
 			Region body = makeRegion(loopStart, stack);
 			loopRegion.setBody(body);
 			loopStart.addAttr(AType.LOOP, loop);
-			loop.getEnd().remove(AFlag.SKIP);
+			loop.getEnd().remove(AFlag.ADDED_TO_REGION);
 		} else {
 			out = condInfo.getElseBlock();
 			if (outerRegion != null
@@ -229,7 +230,7 @@ public class RegionMaker {
 				blocks.remove(conditionBlock);
 				for (BlockNode block : blocks) {
 					if (block.getInstructions().isEmpty()
-							&& !block.contains(AFlag.SKIP)
+							&& !block.contains(AFlag.ADDED_TO_REGION)
 							&& !RegionUtils.isRegionContainsBlock(body, block)) {
 						body.add(block);
 					}
@@ -247,9 +248,11 @@ public class RegionMaker {
 	 */
 	private LoopRegion makeLoopRegion(IRegion curRegion, LoopInfo loop, List<BlockNode> exitBlocks) {
 		for (BlockNode block : exitBlocks) {
-			if (block.contains(AType.EXC_HANDLER)
-					|| block.getInstructions().size() != 1
-					|| block.getInstructions().get(0).getType() != InsnType.IF) {
+			if (block.contains(AType.EXC_HANDLER)) {
+				continue;
+			}
+			InsnNode lastInsn = BlockUtils.getLastInsn(block);
+			if (lastInsn == null || lastInsn.getType() != InsnType.IF) {
 				continue;
 			}
 			List<LoopInfo> loops = block.getAll(AType.LOOP);
@@ -288,12 +291,41 @@ public class RegionMaker {
 					}
 				}
 			}
+			if (found && !checkLoopExits(loop, block)) {
+				found = false;
+			}
 			if (found) {
 				return loopRegion;
 			}
 		}
 		// no exit found => endless loop
 		return null;
+	}
+
+	private boolean checkLoopExits(LoopInfo loop, BlockNode mainExitBlock) {
+		List<Edge> exitEdges = loop.getExitEdges();
+		if (exitEdges.size() < 2) {
+			return true;
+		}
+		Optional<Edge> mainEdgeOpt = exitEdges.stream().filter(edge -> edge.getSource() == mainExitBlock).findFirst();
+		if (!mainEdgeOpt.isPresent()) {
+			throw new JadxRuntimeException("Not found exit edge by exit block: " + mainExitBlock);
+		}
+		Edge mainExitEdge = mainEdgeOpt.get();
+		BlockNode mainOutBlock = skipSyntheticSuccessor(mainExitEdge.getTarget());
+		for (Edge exitEdge : exitEdges) {
+			if (exitEdge != mainExitEdge) {
+				BlockNode outBlock = skipSyntheticSuccessor(exitEdge.getTarget());
+				// all exit paths must be same or don't cross (will be inside loop)
+				if (!isEqualPaths(mainOutBlock, outBlock)) {
+					BlockNode crossBlock = BlockUtils.getPathCross(mth, mainOutBlock, outBlock);
+					if (crossBlock != null) {
+						return false;
+					}
+				}
+			}
+		}
+		return true;
 	}
 
 	private BlockNode makeEndlessLoop(IRegion curRegion, RegionStack stack, LoopInfo loop, BlockNode loopStart) {
@@ -310,7 +342,7 @@ public class RegionMaker {
 		if (exitEdges.size() == 1) {
 			Edge exitEdge = exitEdges.get(0);
 			BlockNode exit = exitEdge.getTarget();
-			if (insertBreak(stack, exit, exitEdge)) {
+			if (insertLoopBreak(stack, loop, exit, exitEdge)) {
 				BlockNode nextBlock = getNextBlock(exit);
 				if (nextBlock != null) {
 					stack.addExit(nextBlock);
@@ -324,10 +356,10 @@ public class RegionMaker {
 				for (BlockNode block : blocks) {
 					if (BlockUtils.isPathExists(exit, block)) {
 						stack.addExit(block);
-						insertBreak(stack, block, exitEdge);
+						insertLoopBreak(stack, loop, block, exitEdge);
 						out = block;
 					} else {
-						insertBreak(stack, exit, exitEdge);
+						insertLoopBreak(stack, loop, exit, exitEdge);
 					}
 				}
 			}
@@ -386,7 +418,7 @@ public class RegionMaker {
 		return true;
 	}
 
-	private boolean insertBreak(RegionStack stack, BlockNode loopExit, Edge exitEdge) {
+	private boolean insertLoopBreak(RegionStack stack, LoopInfo loop, BlockNode loopExit, Edge exitEdge) {
 		BlockNode exit = exitEdge.getTarget();
 		BlockNode insertBlock = null;
 		boolean confirm = false;
@@ -425,6 +457,7 @@ public class RegionMaker {
 			return false;
 		}
 		InsnNode breakInsn = new InsnNode(InsnType.BREAK, 0);
+		breakInsn.addAttr(AType.LOOP, loop);
 		EdgeInsnAttr.addEdgeInsn(insertBlock, insertBlock.getSuccessors().get(0), breakInsn);
 		stack.addExit(exit);
 		// add label to 'break' if needed
@@ -489,7 +522,7 @@ public class RegionMaker {
 			return false;
 		}
 		BlockNode codePred = preds.get(0);
-		if (codePred.contains(AFlag.SKIP)) {
+		if (codePred.contains(AFlag.ADDED_TO_REGION)) {
 			return false;
 		}
 		if (loopEnd.isDominator(codePred)
@@ -530,10 +563,11 @@ public class RegionMaker {
 		for (InsnNode exitInsn : synchRegion.getExitInsns()) {
 			BlockNode insnBlock = BlockUtils.getBlockByInsn(mth, exitInsn);
 			if (insnBlock != null) {
-				insnBlock.add(AFlag.SKIP);
+				insnBlock.add(AFlag.DONT_GENERATE);
 			}
-			exitInsn.add(AFlag.SKIP);
-			InstructionRemover.unbindInsn(mth, exitInsn);
+			exitInsn.add(AFlag.DONT_GENERATE);
+			exitInsn.add(AFlag.REMOVE);
+			InsnRemover.unbindInsn(mth, exitInsn);
 		}
 
 		BlockNode body = getNextBlock(block);
@@ -615,7 +649,7 @@ public class RegionMaker {
 	}
 
 	private BlockNode processIf(IRegion currentRegion, BlockNode block, IfNode ifnode, RegionStack stack) {
-		if (block.contains(AFlag.SKIP)) {
+		if (block.contains(AFlag.ADDED_TO_REGION)) {
 			// block already included in other 'if' region
 			return ifnode.getThenBlock();
 		}
@@ -681,7 +715,7 @@ public class RegionMaker {
 
 	private void addEdgeInsn(IfInfo ifInfo, Region region, EdgeInsnAttr edgeInsnAttr) {
 		BlockNode start = edgeInsnAttr.getStart();
-		if (start.contains(AFlag.SKIP)) {
+		if (start.contains(AFlag.ADDED_TO_REGION)) {
 			return;
 		}
 		boolean fromThisIf = false;
@@ -818,7 +852,10 @@ public class RegionMaker {
 		}
 
 		if (!stack.containsExit(defCase)) {
-			sw.setDefaultCase(makeRegion(defCase, stack));
+			Region defRegion = makeRegion(defCase, stack);
+			if (RegionUtils.notEmpty(defRegion)) {
+				sw.setDefaultCase(defRegion);
+			}
 		}
 		for (Entry<BlockNode, List<Object>> entry : blocksMap.entrySet()) {
 			BlockNode caseBlock = entry.getKey();

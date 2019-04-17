@@ -1,13 +1,14 @@
 package jadx.tests.integration.trycatch;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
 import static jadx.tests.api.utils.JadxMatchers.containsOne;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class TestTryCatchInIf extends IntegrationTest {
 
@@ -23,7 +24,7 @@ public class TestTryCatchInIf extends IntegrationTest {
 					} else {
 						key = Integer.parseInt(value);
 					}
-					return name + "=" + key;
+					return name + '=' + key;
 				} catch (NumberFormatException e) {
 					return "Failed to parse number";
 				}
@@ -33,7 +34,7 @@ public class TestTryCatchInIf extends IntegrationTest {
 		}
 
 		public void check() {
-			assertEquals(null, test("n", null));
+			assertNull(test("n", null));
 			assertEquals("n=7", test("n", "7"));
 			assertEquals("n=77", test("n", "0x" + Integer.toHexString(77)));
 			assertEquals("Failed to parse number", test("n", "abc"));

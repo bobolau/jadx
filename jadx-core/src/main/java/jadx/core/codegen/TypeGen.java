@@ -3,7 +3,6 @@ package jadx.core.codegen;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import jadx.api.JadxArgs;
 import jadx.core.deobf.NameMapper;
 import jadx.core.dex.instructions.args.ArgType;
 import jadx.core.dex.instructions.args.PrimitiveType;
@@ -38,18 +37,20 @@ public class TypeGen {
 		return literalToString(lit, type, dexNode.root().getStringUtils());
 	}
 
-	@Deprecated
-	public static String literalToString(long lit, ArgType type) {
-		return literalToString(lit, type, new StringUtils(new JadxArgs()));
-	}
-
-	private static String literalToString(long lit, ArgType type, StringUtils stringUtils) {
+	public static String literalToString(long lit, ArgType type, StringUtils stringUtils) {
 		if (type == null || !type.isTypeKnown()) {
 			String n = Long.toString(lit);
 			if (Math.abs(lit) > 100) {
-				n += "; // 0x" + Long.toHexString(lit)
-						+ " float:" + Float.intBitsToFloat((int) lit)
-						+ " double:" + Double.longBitsToDouble(lit);
+				StringBuilder sb = new StringBuilder();
+				sb.append(n).append("(0x").append(Long.toHexString(lit));
+				if (type == null || type.contains(PrimitiveType.FLOAT)) {
+					sb.append(", float:").append(Float.intBitsToFloat((int) lit));
+				}
+				if (type == null || type.contains(PrimitiveType.DOUBLE)) {
+					sb.append(", double:").append(Double.longBitsToDouble(lit));
+				}
+				sb.append(')');
+				return sb.toString();
 			}
 			return n;
 		}
@@ -96,7 +97,7 @@ public class TypeGen {
 		if (s == Short.MIN_VALUE) {
 			return "Short.MIN_VALUE";
 		}
-		return "(short) " + Short.toString(s);
+		return Short.toString(s);
 	}
 
 	public static String formatByte(byte b) {
@@ -106,7 +107,7 @@ public class TypeGen {
 		if (b == Byte.MIN_VALUE) {
 			return "Byte.MIN_VALUE";
 		}
-		return "(byte) " + Byte.toString(b);
+		return Byte.toString(b);
 	}
 
 	public static String formatInteger(int i) {
@@ -128,7 +129,7 @@ public class TypeGen {
 		}
 		String str = Long.toString(l);
 		if (Math.abs(l) >= Integer.MAX_VALUE) {
-			str += "L";
+			str += 'L';
 		}
 		return str;
 	}
@@ -152,7 +153,7 @@ public class TypeGen {
 		if (d == Double.MIN_NORMAL) {
 			return "Double.MIN_NORMAL";
 		}
-		return Double.toString(d) + "d";
+		return Double.toString(d) + 'd';
 	}
 
 	public static String formatFloat(float f) {
@@ -174,6 +175,6 @@ public class TypeGen {
 		if (f == Float.MIN_NORMAL) {
 			return "Float.MIN_NORMAL";
 		}
-		return Float.toString(f) + "f";
+		return Float.toString(f) + 'f';
 	}
 }

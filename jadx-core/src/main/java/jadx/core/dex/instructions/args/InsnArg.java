@@ -9,6 +9,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import jadx.core.dex.attributes.AFlag;
+import jadx.core.dex.instructions.ArithNode;
+import jadx.core.dex.instructions.InsnType;
 import jadx.core.dex.nodes.InsnNode;
 import jadx.core.utils.InsnUtils;
 
@@ -31,12 +33,27 @@ public abstract class InsnArg extends Typed {
 		return reg(InsnUtils.getArg(insn, argNum), type);
 	}
 
-	public static TypeImmutableArg typeImmutableReg(int regNum, ArgType type) {
-		return new TypeImmutableArg(regNum, type);
+	public static RegisterArg typeImmutableIfKnownReg(DecodedInstruction insn, int argNum, ArgType type) {
+		if (type.isTypeKnown()) {
+			return typeImmutableReg(InsnUtils.getArg(insn, argNum), type);
+		}
+		return reg(InsnUtils.getArg(insn, argNum), type);
+	}
+
+	public static RegisterArg typeImmutableReg(DecodedInstruction insn, int argNum, ArgType type) {
+		return typeImmutableReg(InsnUtils.getArg(insn, argNum), type);
+	}
+
+	public static RegisterArg typeImmutableReg(int regNum, ArgType type) {
+		return reg(regNum, type, true);
 	}
 
 	public static RegisterArg reg(int regNum, ArgType type, boolean typeImmutable) {
-		return typeImmutable ? new TypeImmutableArg(regNum, type) : new RegisterArg(regNum, type);
+		RegisterArg reg = new RegisterArg(regNum, type);
+		if (typeImmutable) {
+			reg.add(AFlag.IMMUTABLE_TYPE);
+		}
+		return reg;
 	}
 
 	public static LiteralArg lit(long literal, ArgType type) {
@@ -96,6 +113,12 @@ public abstract class InsnArg extends Typed {
 		insn.add(AFlag.WRAPPED);
 		InsnArg arg = wrapArg(insn);
 		parent.setArg(i, arg);
+
+		if (insn.getType() == InsnType.ARITH && parent.getType() == InsnType.ARITH
+				&& ((ArithNode) insn).getOp().noWrapWith(((ArithNode) parent).getOp())) {
+			insn.add(AFlag.DONT_WRAP);
+		}
+
 		return arg;
 	}
 
@@ -141,5 +164,9 @@ public abstract class InsnArg extends Typed {
 
 	public boolean isThis() {
 		return contains(AFlag.THIS);
+	}
+
+	public InsnArg duplicate() {
+		return this;
 	}
 }

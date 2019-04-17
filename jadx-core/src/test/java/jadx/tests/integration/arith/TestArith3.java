@@ -1,6 +1,6 @@
 package jadx.tests.integration.arith;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
@@ -8,14 +8,14 @@ import jadx.tests.api.IntegrationTest;
 import static jadx.tests.api.utils.JadxMatchers.containsOne;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.not;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class TestArith3 extends IntegrationTest {
 
 	public static class TestCls {
-		private int vp;
+		public int vp;
 
-		private void test(byte[] buffer) {
+		public void test(byte[] buffer) {
 			int n = ((buffer[3] & 255) + 4) + ((buffer[2] & 15) << 8);
 			while (n + 4 < buffer.length) {
 				int c = buffer[n] & 255;
@@ -39,5 +39,15 @@ public class TestArith3 extends IntegrationTest {
 		assertThat(code, containsOne("while (n + 4 < buffer.length) {"));
 		assertThat(code, containsOne("n += len + 5;"));
 		assertThat(code, not(containsString("; n += len + 5) {")));
+		assertThat(code, not(containsString("default:")));
+	}
+
+	@Test
+	public void testNoDebug() {
+		noDebugInfo();
+		ClassNode cls = getClassNode(TestCls.class);
+		String code = cls.getCode().toString();
+
+		assertThat(code, containsOne("while ("));
 	}
 }

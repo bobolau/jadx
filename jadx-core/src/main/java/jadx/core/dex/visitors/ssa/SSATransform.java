@@ -1,7 +1,6 @@
 package jadx.core.dex.visitors.ssa;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Deque;
 import java.util.Iterator;
@@ -23,7 +22,7 @@ import jadx.core.dex.visitors.AbstractVisitor;
 import jadx.core.dex.visitors.JadxVisitor;
 import jadx.core.dex.visitors.blocksmaker.BlockFinish;
 import jadx.core.utils.InsnList;
-import jadx.core.utils.InstructionRemover;
+import jadx.core.utils.InsnRemover;
 import jadx.core.utils.exceptions.JadxException;
 import jadx.core.utils.exceptions.JadxRuntimeException;
 
@@ -43,6 +42,10 @@ public class SSATransform extends AbstractVisitor {
 	}
 
 	private static void process(MethodNode mth) {
+		if (!mth.getSVars().isEmpty()) {
+			return;
+		}
+
 		LiveVarAnalysis la = new LiveVarAnalysis(mth);
 		la.runAnalysis();
 		int regsCount = mth.getRegsCount();
@@ -63,6 +66,8 @@ public class SSATransform extends AbstractVisitor {
 				throw new JadxRuntimeException("Phi nodes fix limit reached!");
 			}
 		} while (repeatFix);
+
+		hidePhiInsns(mth);
 	}
 
 	private static void placePhi(MethodNode mth, int regNum, LiveVarAnalysis la) {
@@ -117,38 +122,31 @@ public class SSATransform extends AbstractVisitor {
 	}
 
 	private static void renameVariables(MethodNode mth) {
-		if (!mth.getSVars().isEmpty()) {
-			throw new JadxRuntimeException("SSA rename variables already executed");
-		}
-		int regsCount = mth.getRegsCount();
-		SSAVar[] vars = new SSAVar[regsCount];
-		int[] versions = new int[regsCount];
-		// init method arguments
-		for (RegisterArg arg : mth.getArguments(true)) {
-			int regNum = arg.getRegNum();
-			vars[regNum] = newSSAVar(mth, versions, arg, regNum);
-		}
-		BlockNode enterBlock = mth.getEnterBlock();
-		initPhiInEnterBlock(vars, enterBlock);
-		renameVar(mth, vars, versions, enterBlock);
-	}
+		RenameState initState = RenameState.init(mth);
+		initPhiInEnterBlock(initState);
 
-	private static SSAVar newSSAVar(MethodNode mth, int[] versions, RegisterArg arg, int regNum) {
-		int version = versions[regNum]++;
-		return mth.makeNewSVar(regNum, version, arg);
-	}
-
-	private static void initPhiInEnterBlock(SSAVar[] vars, BlockNode enterBlock) {
-		PhiListAttr phiList = enterBlock.get(AType.PHI_LIST);
-		if (phiList != null) {
-			for (PhiInsn phiInsn : phiList.getList()) {
-				bindPhiArg(vars, enterBlock, phiInsn);
+		Deque<RenameState> stack = new LinkedList<>();
+		stack.push(initState);
+		while (!stack.isEmpty()) {
+			RenameState state = stack.pop();
+			renameVarsInBlock(state);
+			for (BlockNode dominated : state.getBlock().getDominatesOn()) {
+				stack.push(RenameState.copyFrom(state, dominated));
 			}
 		}
 	}
 
-	private static void renameVar(MethodNode mth, SSAVar[] vars, int[] vers, BlockNode block) {
-		SSAVar[] inputVars = Arrays.copyOf(vars, vars.length);
+	private static void initPhiInEnterBlock(RenameState initState) {
+		PhiListAttr phiList = initState.getBlock().get(AType.PHI_LIST);
+		if (phiList != null) {
+			for (PhiInsn phiInsn : phiList.getList()) {
+				bindPhiArg(initState, phiInsn);
+			}
+		}
+	}
+
+	private static void renameVarsInBlock(RenameState state) {
+		BlockNode block = state.getBlock();
 		for (InsnNode insn : block.getInstructions()) {
 			if (insn.getType() != InsnType.PHI) {
 				for (InsnArg arg : insn.getArguments()) {
@@ -157,18 +155,17 @@ public class SSATransform extends AbstractVisitor {
 					}
 					RegisterArg reg = (RegisterArg) arg;
 					int regNum = reg.getRegNum();
-					SSAVar var = vars[regNum];
+					SSAVar var = state.getVar(regNum);
 					if (var == null) {
 						throw new JadxRuntimeException("Not initialized variable reg: " + regNum
-								+ ", insn: " + insn + ", block:" + block + ", method: " + mth);
+								+ ", insn: " + insn + ", block:" + block);
 					}
 					var.use(reg);
 				}
 			}
 			RegisterArg result = insn.getResult();
 			if (result != null) {
-				int regNum = result.getRegNum();
-				vars[regNum] = newSSAVar(mth, vers, result, regNum);
+				state.startVar(result);
 			}
 		}
 		for (BlockNode s : block.getSuccessors()) {
@@ -177,22 +174,18 @@ public class SSATransform extends AbstractVisitor {
 				continue;
 			}
 			for (PhiInsn phiInsn : phiList.getList()) {
-				bindPhiArg(vars, block, phiInsn);
+				bindPhiArg(state, phiInsn);
 			}
 		}
-		for (BlockNode domOn : block.getDominatesOn()) {
-			renameVar(mth, vars, vers, domOn);
-		}
-		System.arraycopy(inputVars, 0, vars, 0, vars.length);
 	}
 
-	private static void bindPhiArg(SSAVar[] vars, BlockNode block, PhiInsn phiInsn) {
+	private static void bindPhiArg(RenameState state, PhiInsn phiInsn) {
 		int regNum = phiInsn.getResult().getRegNum();
-		SSAVar var = vars[regNum];
+		SSAVar var = state.getVar(regNum);
 		if (var == null) {
 			return;
 		}
-		RegisterArg arg = phiInsn.bindArg(block);
+		RegisterArg arg = phiInsn.bindArg(state.getBlock());
 		var.use(arg);
 		var.setUsedInPhi(phiInsn);
 	}
@@ -220,7 +213,7 @@ public class SSATransform extends AbstractVisitor {
 			if (parentInsn != null
 					&& parentInsn.getResult() != null
 					&& parentInsn.contains(AFlag.TRY_LEAVE)
-					&& phi.removeArg(arg)) {
+					&& phi.removeArg(arg) /* TODO: fix registers removing*/) {
 				argsCount--;
 				continue;
 			}
@@ -242,7 +235,7 @@ public class SSATransform extends AbstractVisitor {
 					InsnNode parentInsn = arg.getAssignInsn();
 					if (parentInsn != null && parentInsn.contains(AFlag.REMOVE)) {
 						phi.removeArg(arg);
-						InstructionRemover.remove(mth, block, parentInsn);
+						InsnRemover.remove(mth, block, parentInsn);
 						removed = true;
 					}
 				}
@@ -290,7 +283,7 @@ public class SSATransform extends AbstractVisitor {
 					phi.removeArg(useArg);
 				}
 			}
-			InstructionRemover.remove(mth, block, phi);
+			InsnRemover.remove(mth, block, phi);
 			return true;
 		}
 		boolean allSame = phi.getArgsCount() == 1 || isSameArgs(phi);
@@ -333,7 +326,7 @@ public class SSATransform extends AbstractVisitor {
 							sVar.setUsedInPhi(null);
 						}
 					}
-					InstructionRemover.remove(mth, block, phiInsn);
+					InsnRemover.remove(mth, block, phiInsn);
 				}
 			}
 			if (list.isEmpty()) {
@@ -403,7 +396,7 @@ public class SSATransform extends AbstractVisitor {
 				assignInsn.add(AFlag.DONT_INLINE);
 			}
 		}
-		InstructionRemover.unbindInsn(mth, phi);
+		InsnRemover.unbindInsn(mth, phi);
 		return true;
 	}
 
@@ -419,7 +412,6 @@ public class SSATransform extends AbstractVisitor {
 			return;
 		}
 		arg.add(AFlag.THIS);
-		arg.setName(RegisterArg.THIS_ARG_NAME);
 		// mark all moved 'this'
 		InsnNode parentInsn = arg.getParentInsn();
 		if (parentInsn != null
@@ -429,8 +421,14 @@ public class SSATransform extends AbstractVisitor {
 			if (resArg.getRegNum() != arg.getRegNum()
 					&& !resArg.getSVar().isUsedInPhi()) {
 				markThisArgs(resArg);
-				parentInsn.add(AFlag.SKIP);
+				parentInsn.add(AFlag.DONT_GENERATE);
 			}
+		}
+	}
+
+	private static void hidePhiInsns(MethodNode mth) {
+		for (BlockNode block : mth.getBasicBlocks()) {
+			block.getInstructions().removeIf(insn -> insn.getType() == InsnType.PHI);
 		}
 	}
 }

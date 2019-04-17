@@ -1,19 +1,19 @@
 package jadx.tests.integration.trycatch;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
 import static org.hamcrest.CoreMatchers.containsString;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class TestTryCatch2 extends IntegrationTest {
 
 	public static class TestCls {
 		private final static Object obj = new Object();
 
-		private static boolean test() {
+		public static boolean test() {
 			try {
 				synchronized (obj) {
 					obj.wait(5);

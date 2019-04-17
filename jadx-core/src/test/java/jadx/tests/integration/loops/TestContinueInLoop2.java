@@ -1,6 +1,6 @@
 package jadx.tests.integration.loops;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.attributes.AType;
 import jadx.core.dex.instructions.InsnType;
@@ -13,13 +13,13 @@ import jadx.core.dex.trycatch.ExcHandlerAttr;
 import jadx.core.dex.trycatch.ExceptionHandler;
 import jadx.core.dex.trycatch.TryCatchBlock;
 import jadx.core.utils.BlockUtils;
-import jadx.core.utils.InstructionRemover;
+import jadx.core.utils.InsnRemover;
 import jadx.tests.api.IntegrationTest;
 
 import static jadx.tests.api.utils.JadxMatchers.containsOne;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.not;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class TestContinueInLoop2 extends IntegrationTest {
 
@@ -33,13 +33,13 @@ public class TestContinueInLoop2 extends IntegrationTest {
 					excHandler.addBlock(node);
 				}
 				for (BlockNode excBlock : excHandler.getBlocks()) {
-					InstructionRemover remover = new InstructionRemover(mth, excBlock);
+					InsnRemover remover = new InsnRemover(mth, excBlock);
 					for (InsnNode insn : excBlock.getInstructions()) {
 						if (insn.getType() == InsnType.MONITOR_ENTER) {
 							break;
 						}
 						if (insn.getType() == InsnType.MONITOR_EXIT) {
-							remover.add(insn);
+							remover.addAndUnbind(insn);
 						}
 					}
 					remover.perform();

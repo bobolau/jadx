@@ -2,14 +2,14 @@ package jadx.tests.integration.types;
 
 import java.util.Arrays;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
 import static jadx.tests.api.utils.JadxMatchers.containsOne;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
-import static org.junit.Assert.assertThat;
 
 public class TestTypeResolver4 extends IntegrationTest {
 
@@ -41,7 +41,7 @@ public class TestTypeResolver4 extends IntegrationTest {
 		ClassNode cls = getClassNode(TestCls.class);
 		String code = cls.getCode().toString();
 
-		assertThat(code, containsOne("(strArray[end] != (byte) 0 || strArray[end + 1] != (byte) 0)"));
+		assertThat(code, containsOne("(strArray[end] != 0 || strArray[end + 1] != 0)"));
 	}
 
 	@Test

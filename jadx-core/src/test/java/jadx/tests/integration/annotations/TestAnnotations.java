@@ -1,6 +1,6 @@
 package jadx.tests.integration.annotations;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
@@ -8,12 +8,12 @@ import jadx.tests.api.IntegrationTest;
 import static jadx.tests.api.utils.JadxMatchers.containsOne;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.not;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class TestAnnotations extends IntegrationTest {
 
 	public static class TestCls {
-		private static @interface A {
+		private @interface A {
 			int a();
 		}
 
@@ -29,7 +29,7 @@ public class TestAnnotations extends IntegrationTest {
 		public void methodA3() {
 		}
 
-		private static @interface V {
+		private @interface V {
 			boolean value();
 		}
 
@@ -37,7 +37,7 @@ public class TestAnnotations extends IntegrationTest {
 		public void methodV() {
 		}
 
-		private static @interface D {
+		private @interface D {
 			float value() default 1.1f;
 		}
 

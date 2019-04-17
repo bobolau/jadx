@@ -8,6 +8,7 @@ import org.jetbrains.annotations.NotNull;
 
 import jadx.api.JavaClass;
 import jadx.api.JavaPackage;
+import jadx.gui.JadxWrapper;
 import jadx.gui.utils.Utils;
 
 public class JPackage extends JNode implements Comparable<JPackage> {
@@ -15,12 +16,16 @@ public class JPackage extends JNode implements Comparable<JPackage> {
 
 	private static final ImageIcon PACKAGE_ICON = Utils.openIcon("package_obj");
 
+	private final String fullName;
 	private String name;
+	private boolean enabled;
 	private final List<JClass> classes;
 	private final List<JPackage> innerPackages = new ArrayList<>(1);
 
-	public JPackage(JavaPackage pkg) {
+	public JPackage(JavaPackage pkg, JadxWrapper wrapper) {
+		this.fullName = pkg.getName();
 		this.name = pkg.getName();
+		setEnabled(wrapper);
 		List<JavaClass> javaClasses = pkg.getClasses();
 		this.classes = new ArrayList<>(javaClasses.size());
 		for (JavaClass javaClass : javaClasses) {
@@ -29,26 +34,41 @@ public class JPackage extends JNode implements Comparable<JPackage> {
 		update();
 	}
 
-	public JPackage(String name) {
+	public JPackage(String name, JadxWrapper wrapper) {
+		this.fullName = name;
 		this.name = name;
+		setEnabled(wrapper);
 		this.classes = new ArrayList<>(1);
+	}
+
+	private void setEnabled(JadxWrapper wrapper) {
+		List<String> excludedPackages = wrapper.getExcludedPackages();
+		this.enabled = excludedPackages.isEmpty()
+				|| excludedPackages.stream().filter(p -> !p.isEmpty())
+				.noneMatch(p -> name.equals(p) || name.startsWith(p + '.'));
 	}
 
 	public final void update() {
 		removeAllChildren();
-		for (JPackage pkg : innerPackages) {
-			pkg.update();
-			add(pkg);
-		}
-		for (JClass cls : classes) {
-			cls.update();
-			add(cls);
+		if (isEnabled()) {
+			for (JPackage pkg : innerPackages) {
+				pkg.update();
+				add(pkg);
+			}
+			for (JClass cls : classes) {
+				cls.update();
+				add(cls);
+			}
 		}
 	}
 
 	@Override
 	public String getName() {
 		return name;
+	}
+
+	public String getFullName() {
+		return fullName;
 	}
 
 	public void setName(String name) {
@@ -107,5 +127,9 @@ public class JPackage extends JNode implements Comparable<JPackage> {
 	@Override
 	public String makeLongString() {
 		return name;
+	}
+
+	public boolean isEnabled() {
+		return enabled;
 	}
 }

@@ -1,12 +1,12 @@
 package jadx.tests.integration.names;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
 import static jadx.tests.api.utils.JadxMatchers.containsOne;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class TestSameMethodsNames extends IntegrationTest {
 
@@ -21,6 +21,7 @@ public class TestSameMethodsNames extends IntegrationTest {
 				System.out.println("constructor");
 			}
 
+			@SuppressWarnings("MethodNameSameAsClassName")
 			void Bug() {
 				System.out.println("Bug");
 			}

@@ -1,16 +1,19 @@
 package jadx.tests.integration.synchronize;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
+import jadx.NotYetImplemented;
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
 import static org.hamcrest.CoreMatchers.containsString;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.CoreMatchers.not;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class TestSynchronized2 extends IntegrationTest {
 
 	public static class TestCls {
+		@SuppressWarnings("unused")
 		private static synchronized boolean test(Object obj) {
 			return obj.toString() != null;
 		}
@@ -23,8 +26,15 @@ public class TestSynchronized2 extends IntegrationTest {
 
 		assertThat(code, containsString("private static synchronized boolean test(Object obj) {"));
 		assertThat(code, containsString("obj.toString() != null;"));
-		// TODO
-//		assertThat(code, containsString("return obj.toString() != null;"));
-//		assertThat(code, not(containsString("synchronized (")));
+	}
+
+	@Test
+	@NotYetImplemented
+	public void test2() {
+		ClassNode cls = getClassNode(TestCls.class);
+		String code = cls.getCode().toString();
+
+		assertThat(code, containsString("return obj.toString() != null;"));
+		assertThat(code, not(containsString("synchronized (")));
 	}
 }

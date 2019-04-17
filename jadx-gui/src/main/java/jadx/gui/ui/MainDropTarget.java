@@ -59,10 +59,10 @@ public class MainDropTarget implements DropTargetListener {
 		try {
 			Transferable transferable = dtde.getTransferable();
 			List<File> transferData = (List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
-			if (transferData != null && transferData.size() > 0) {
+			if (!transferData.isEmpty()) {
 				dtde.dropComplete(true);
 				// load first file
-				mainWindow.openFile(transferData.get(0));
+				mainWindow.open(transferData.get(0).toPath());
 			}
 		} catch (Exception e) {
 			LOG.error("File drop operation failed", e);

@@ -1,7 +1,10 @@
 package jadx.core.dex.visitors.blocksmaker;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,13 +30,17 @@ public class BlockSplitter extends AbstractVisitor {
 
 	// leave these instructions alone in block node
 	private static final Set<InsnType> SEPARATE_INSNS = EnumSet.of(
-			InsnType.RETURN,
-			InsnType.IF,
-			InsnType.SWITCH,
-			InsnType.MONITOR_ENTER,
-			InsnType.MONITOR_EXIT,
-			InsnType.THROW
+		InsnType.RETURN,
+		InsnType.IF,
+		InsnType.SWITCH,
+		InsnType.MONITOR_ENTER,
+		InsnType.MONITOR_EXIT,
+		InsnType.THROW
 	);
+
+	public static boolean makeSeparate(InsnType insnType) {
+		return SEPARATE_INSNS.contains(insnType);
+	}
 
 	@Override
 	public void visit(MethodNode mth) {
@@ -44,9 +51,14 @@ public class BlockSplitter extends AbstractVisitor {
 
 		mth.initBasicBlocks();
 		splitBasicBlocks(mth);
+		removeJumpAttr(mth);
 		removeInsns(mth);
 		removeEmptyDetachedBlocks(mth);
+		removeUnreachableBlocks(mth);
 		initBlocksInTargetNodes(mth);
+
+		removeJumpAttributes(mth.getInstructions());
+		mth.unloadInsnArr();
 	}
 
 	/**
@@ -76,8 +88,8 @@ public class BlockSplitter extends AbstractVisitor {
 			if (prevInsn != null) {
 				InsnType type = prevInsn.getType();
 				if (type == InsnType.GOTO
-						|| type == InsnType.THROW
-						|| SEPARATE_INSNS.contains(type)) {
+					    || type == InsnType.THROW
+					    || makeSeparate(type)) {
 
 					if (type == InsnType.RETURN || type == InsnType.THROW) {
 						mth.addExitBlock(curBlock);
@@ -90,11 +102,11 @@ public class BlockSplitter extends AbstractVisitor {
 					startNew = true;
 				} else {
 					startNew = isSplitByJump(prevInsn, insn)
-							|| SEPARATE_INSNS.contains(insn.getType())
-							|| isDoWhile(blocksMap, curBlock, insn)
-							|| insn.contains(AType.EXC_HANDLER)
-							|| prevInsn.contains(AFlag.TRY_LEAVE)
-							|| prevInsn.getType() == InsnType.MOVE_EXCEPTION;
+						           || makeSeparate(insn.getType())
+						           || isDoWhile(blocksMap, curBlock, insn)
+						           || insn.contains(AType.EXC_HANDLER)
+						           || prevInsn.contains(AFlag.TRY_LEAVE)
+						           || prevInsn.getType() == InsnType.MOVE_EXCEPTION;
 					if (startNew) {
 						curBlock = connectNewBlock(mth, curBlock, insn.getOffset());
 					}
@@ -296,6 +308,14 @@ public class BlockSplitter extends AbstractVisitor {
 		return block;
 	}
 
+	private void removeJumpAttr(MethodNode mth) {
+		for (BlockNode block : mth.getBasicBlocks()) {
+			for (InsnNode insn : block.getInstructions()) {
+				insn.remove(AType.JUMP);
+			}
+		}
+	}
+
 	private static void removeInsns(MethodNode mth) {
 		for (BlockNode block : mth.getBasicBlocks()) {
 			block.getInstructions().removeIf(insn -> {
@@ -310,9 +330,50 @@ public class BlockSplitter extends AbstractVisitor {
 
 	static boolean removeEmptyDetachedBlocks(MethodNode mth) {
 		return mth.getBasicBlocks().removeIf(block ->
-				block.getInstructions().isEmpty()
-						&& block.getPredecessors().isEmpty()
-						&& block.getSuccessors().isEmpty()
+			                                     block.getInstructions().isEmpty()
+				                                     && block.getPredecessors().isEmpty()
+				                                     && block.getSuccessors().isEmpty()
 		);
+	}
+
+	private void removeJumpAttributes(InsnNode[] insnArr) {
+		for (InsnNode insn : insnArr) {
+			if (insn != null && insn.contains(AType.JUMP)) {
+				insn.remove(AType.JUMP);
+			}
+		}
+	}
+
+	private void removeUnreachableBlocks(MethodNode mth) {
+		Set<BlockNode> toRemove = new LinkedHashSet<>();
+		for (BlockNode block : mth.getBasicBlocks()) {
+			if (block.getPredecessors().isEmpty() && block != mth.getEnterBlock()) {
+				toRemove.add(block);
+				collectSuccessors(block, toRemove);
+			}
+		}
+		if (!toRemove.isEmpty()) {
+			mth.getBasicBlocks().removeIf(toRemove::contains);
+
+			int insnsCount = toRemove.stream().mapToInt(block -> block.getInstructions().size()).sum();
+			mth.addAttr(AType.COMMENTS, "JADX INFO: unreachable blocks removed: " + toRemove.size()
+				                            + ", instructions: " + insnsCount);
+		}
+	}
+
+	private void collectSuccessors(BlockNode startBlock, Set<BlockNode> toRemove) {
+		Deque<BlockNode> stack = new ArrayDeque<>();
+		stack.add(startBlock);
+		while (!stack.isEmpty()) {
+			BlockNode block = stack.pop();
+			if (!toRemove.contains(block)) {
+				for (BlockNode successor : block.getSuccessors()) {
+					if (toRemove.containsAll(successor.getPredecessors())) {
+						stack.push(successor);
+					}
+				}
+			}
+			toRemove.add(block);
+		}
 	}
 }

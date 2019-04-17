@@ -2,19 +2,19 @@ package jadx.tests.integration.loops;
 
 import java.util.List;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
 import static jadx.tests.api.utils.JadxMatchers.containsOne;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class TestNestedLoops extends IntegrationTest {
 
 	public static class TestCls {
 
-		private void test(List<String> l1, List<String> l2) {
+		public void test(List<String> l1, List<String> l2) {
 			for (String s1 : l1) {
 				for (String s2 : l2) {
 					if (s1.equals(s2)) {

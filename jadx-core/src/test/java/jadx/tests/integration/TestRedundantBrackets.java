@@ -1,13 +1,13 @@
 package jadx.tests.integration;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.not;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class TestRedundantBrackets extends IntegrationTest {
 
@@ -17,7 +17,10 @@ public class TestRedundantBrackets extends IntegrationTest {
 		}
 
 		public int method2(Object obj) {
-			return obj instanceof String ? ((String) obj).length() : 0;
+			if (obj instanceof String) {
+				return ((String) obj).length();
+			}
+			return 0;
 		}
 
 		public int method3(int a, int b) {
@@ -36,7 +39,7 @@ public class TestRedundantBrackets extends IntegrationTest {
 			}
 		}
 
-		public void method5(int a[], int n) {
+		public void method5(int[] a, int n) {
 			a[1] = n * 2;
 			a[n - 1] = 1;
 		}
@@ -50,7 +53,8 @@ public class TestRedundantBrackets extends IntegrationTest {
 		assertThat(code, not(containsString("(-1)")));
 		assertThat(code, not(containsString("return;")));
 
-		assertThat(code, containsString("return obj instanceof String ? ((String) obj).length() : 0;"));
+		assertThat(code, containsString("if (obj instanceof String) {"));
+		assertThat(code, containsString("return ((String) obj).length();"));
 		assertThat(code, containsString("a + b < 10"));
 		assertThat(code, containsString("(a & b) != 0"));
 		assertThat(code, containsString("if (num == 4 || num == 6 || num == 8 || num == 10)"));

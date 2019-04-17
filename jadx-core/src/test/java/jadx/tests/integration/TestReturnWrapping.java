@@ -1,12 +1,12 @@
 package jadx.tests.integration;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
 import static org.hamcrest.CoreMatchers.containsString;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class TestReturnWrapping extends IntegrationTest {
 	public static class TestCls {
@@ -54,7 +54,11 @@ public class TestReturnWrapping extends IntegrationTest {
 
 		assertThat(code, containsString("return 255;"));
 		assertThat(code, containsString("return arg0 + 1;"));
-		assertThat(code, containsString("return i > 128 ? arg0.toString() + ret.toString() : Integer.valueOf(i);"));
+
+		// TODO: reduce code vars by name
+//		assertThat(code, containsString("return i > 128 ? arg0.toString() + ret.toString() : Integer.valueOf(i);"));
+		assertThat(code, containsString("return i2 > 128 ? arg0.toString() + ret.toString() : Integer.valueOf(i2);"));
+
 		assertThat(code, containsString("return arg0 + 2;"));
 		assertThat(code, containsString("arg0 -= 951;"));
 	}

@@ -6,14 +6,14 @@ import java.io.IOException;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
 import static jadx.tests.api.utils.JadxMatchers.containsOne;
 import static jadx.tests.api.utils.JadxMatchers.countString;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class TestIssue13b extends IntegrationTest {
 
@@ -22,9 +22,9 @@ public class TestIssue13b extends IntegrationTest {
 		private static final String PROPERTIES_FILE = "";
 		private static final String TAG = "";
 		private final CountDownLatch mInitializedLatch = new CountDownLatch(1);
-		private int mC2KServerPort = 0;
+		public int mC2KServerPort = 0;
 		private String mSuplServerHost = "";
-		private int mSuplServerPort = 0;
+		public int mSuplServerPort = 0;
 		private String mC2KServerHost = "";
 
 		public TestCls() {

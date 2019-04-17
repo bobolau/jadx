@@ -1,8 +1,16 @@
 package jadx.tests.api.utils;
 
+import org.junit.jupiter.api.extension.ExtendWith;
+
+import jadx.NotYetImplementedExtension;
 import jadx.core.codegen.CodeWriter;
 
+@ExtendWith(NotYetImplementedExtension.class)
 public class TestUtils {
+
+	public static String indent() {
+		return CodeWriter.INDENT_STR;
+	}
 
 	public static String indent(int indent) {
 		if (indent == 1) {
@@ -24,5 +32,4 @@ public class TestUtils {
 		}
 		return count;
 	}
-
 }

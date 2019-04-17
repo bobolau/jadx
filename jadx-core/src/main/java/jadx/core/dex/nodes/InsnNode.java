@@ -6,9 +6,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
+import org.jetbrains.annotations.Nullable;
+
 import com.android.dx.io.instructions.DecodedInstruction;
 import com.rits.cloning.Cloner;
 
+import jadx.core.dex.attributes.AFlag;
 import jadx.core.dex.attributes.nodes.LineAttrNode;
 import jadx.core.dex.instructions.InsnType;
 import jadx.core.dex.instructions.args.ArgType;
@@ -18,6 +21,7 @@ import jadx.core.dex.instructions.args.LiteralArg;
 import jadx.core.dex.instructions.args.NamedArg;
 import jadx.core.dex.instructions.args.RegisterArg;
 import jadx.core.dex.instructions.args.SSAVar;
+import jadx.core.utils.InsnRemover;
 import jadx.core.utils.InsnUtils;
 import jadx.core.utils.Utils;
 
@@ -53,16 +57,36 @@ public class InsnNode extends LineAttrNode {
 		return insn;
 	}
 
-	public void setResult(RegisterArg res) {
+	public void setResult(@Nullable RegisterArg res) {
 		if (res != null) {
 			res.setParentInsn(this);
+			SSAVar ssaVar = res.getSVar();
+			if (ssaVar != null) {
+				ssaVar.setAssign(res);
+			}
 		}
 		this.result = res;
 	}
 
 	public void addArg(InsnArg arg) {
-		arg.setParentInsn(this);
 		arguments.add(arg);
+		attachArg(arg);
+	}
+
+	public void setArg(int n, InsnArg arg) {
+		arguments.set(n, arg);
+		attachArg(arg);
+	}
+
+	private void attachArg(InsnArg arg) {
+		arg.setParentInsn(this);
+		if (arg.isRegister()) {
+			RegisterArg reg = (RegisterArg) arg;
+			SSAVar ssaVar = reg.getSVar();
+			if (ssaVar != null) {
+				ssaVar.use(reg);
+			}
+		}
 	}
 
 	public InsnType getType() {
@@ -95,21 +119,15 @@ public class InsnNode extends LineAttrNode {
 		return false;
 	}
 
-	public void setArg(int n, InsnArg arg) {
-		arg.setParentInsn(this);
-		arguments.set(n, arg);
-	}
-
 	/**
 	 * Replace instruction arg with another using recursive search.
-	 * <br>
-	 * <b>Caution:</b> this method don't change usage information for replaced argument.
 	 */
 	public boolean replaceArg(InsnArg from, InsnArg to) {
 		int count = getArgsCount();
 		for (int i = 0; i < count; i++) {
 			InsnArg arg = arguments.get(i);
 			if (arg == from) {
+				InsnRemover.unbindArgUsage(null, arg);
 				setArg(i, to);
 				return true;
 			}
@@ -125,10 +143,7 @@ public class InsnNode extends LineAttrNode {
 		for (int i = 0; i < count; i++) {
 			if (arg == arguments.get(i)) {
 				arguments.remove(i);
-				if (arg instanceof RegisterArg) {
-					RegisterArg reg = (RegisterArg) arg;
-					reg.getSVar().removeUse(reg);
-				}
+				InsnRemover.unbindArgUsage(null, arg);
 				return true;
 			}
 		}
@@ -182,6 +197,12 @@ public class InsnNode extends LineAttrNode {
 	}
 
 	public boolean canReorder() {
+		if (contains(AFlag.DONT_GENERATE)) {
+			if (getType() == InsnType.MONITOR_EXIT) {
+				return false;
+			}
+			return true;
+		}
 		switch (getType()) {
 			case CONST:
 			case CONST_STR:
@@ -315,5 +336,25 @@ public class InsnNode extends LineAttrNode {
 			return copyCommonParams(new InsnNode(insnType, getArgsCount()));
 		}
 		return INSN_CLONER.deepClone(this);
+	}
+
+	public boolean canThrowException() {
+		switch (getType()) {
+			case RETURN:
+			case IF:
+			case GOTO:
+			case MOVE:
+			case MOVE_EXCEPTION:
+			case NEG:
+			case CONST:
+			case CONST_STR:
+			case CONST_CLASS:
+			case CMP_L:
+			case CMP_G:
+				return false;
+
+			default:
+				return true;
+		}
 	}
 }

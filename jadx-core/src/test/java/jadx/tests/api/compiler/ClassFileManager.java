@@ -6,10 +6,8 @@ import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import java.io.IOException;
 import java.security.SecureClassLoader;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 import static javax.tools.JavaFileObject.Kind;
 
@@ -24,7 +22,7 @@ public class ClassFileManager extends ForwardingJavaFileManager<StandardJavaFile
 
 	@Override
 	public JavaFileObject getJavaFileForOutput(Location location, String className,
-			Kind kind, FileObject sibling) throws IOException {
+	                                           Kind kind, FileObject sibling) throws IOException {
 		JavaClassObject clsObject = new JavaClassObject(className, kind);
 		classLoader.getClsMap().put(className, clsObject);
 		return clsObject;

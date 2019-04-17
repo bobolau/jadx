@@ -1,12 +1,12 @@
 package jadx.tests.integration.enums;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
 import static jadx.tests.api.utils.JadxMatchers.containsLines;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class TestEnums extends IntegrationTest {
 
@@ -46,10 +46,10 @@ public class TestEnums extends IntegrationTest {
 		assertThat(code, containsLines(1, "public enum EmptyEnum {", "}"));
 		assertThat(code, containsLines(1,
 				"public enum EmptyEnum2 {",
-				indent(1) + ";",
+				indent(1) + ';',
 				"",
 				indent(1) + "public static void mth() {",
-				indent(1) + "}",
+				indent(1) + '}',
 				"}"));
 
 		assertThat(code, containsLines(1, "public enum Direction {",
@@ -64,7 +64,7 @@ public class TestEnums extends IntegrationTest {
 				"",
 				indent(1) + "public String test() {",
 				indent(2) + "return \"\";",
-				indent(1) + "}",
+				indent(1) + '}',
 				"}"));
 	}
 }

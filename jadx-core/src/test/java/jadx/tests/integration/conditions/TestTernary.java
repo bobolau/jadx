@@ -1,14 +1,13 @@
 package jadx.tests.integration.conditions;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.not;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class TestTernary extends IntegrationTest {
 
@@ -18,12 +17,14 @@ public class TestTernary extends IntegrationTest {
 		}
 
 		public void test2(int a) {
-			assertTrue(a == 3);
+			checkTrue(a == 3);
 		}
 
 		public int test3(int a) {
-			return a > 0 ? 1 : (a + 2) * 3;
+			return a > 0 ? a : (a + 2) * 3;
 		}
+
+		private static void checkTrue(boolean v) {}
 	}
 
 	@Test
@@ -33,7 +34,7 @@ public class TestTernary extends IntegrationTest {
 
 		assertThat(code, not(containsString("else")));
 		assertThat(code, containsString("return a != 2;"));
-		assertThat(code, containsString("assertTrue(a == 3)"));
-		assertThat(code, containsString("return a > 0 ? 1 : (a + 2) * 3;"));
+		assertThat(code, containsString("checkTrue(a == 3)"));
+		assertThat(code, containsString("return a > 0 ? a : (a + 2) * 3;"));
 	}
 }

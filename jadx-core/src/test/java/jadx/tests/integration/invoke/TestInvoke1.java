@@ -2,13 +2,13 @@ package jadx.tests.integration.invoke;
 
 import java.io.IOException;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
 import static jadx.tests.api.utils.JadxMatchers.containsOne;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class TestInvoke1 extends IntegrationTest {
 
@@ -16,7 +16,7 @@ public class TestInvoke1 extends IntegrationTest {
 
 		private A is;
 
-		private C test(int start) throws IOException {
+		public C test(int start) throws IOException {
 			int id = is.readInt32();
 			String name = is.readString16Fixed(128);
 

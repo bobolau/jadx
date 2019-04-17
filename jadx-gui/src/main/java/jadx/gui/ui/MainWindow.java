@@ -1,19 +1,13 @@
 package jadx.gui.ui;
 
-import javax.swing.*;
-import javax.swing.event.MenuEvent;
-import javax.swing.event.MenuListener;
-import javax.swing.event.TreeExpansionEvent;
-import javax.swing.event.TreeWillExpandListener;
-import javax.swing.filechooser.FileNameExtensionFilter;
-import javax.swing.tree.DefaultMutableTreeNode;
-import javax.swing.tree.DefaultTreeCellRenderer;
-import javax.swing.tree.DefaultTreeModel;
-import javax.swing.tree.ExpandVetoException;
-import javax.swing.tree.TreeNode;
-import javax.swing.tree.TreePath;
-import javax.swing.tree.TreeSelectionModel;
-import java.awt.*;
+import static javax.swing.KeyStroke.getKeyStroke;
+
+import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.DisplayMode;
+import java.awt.Font;
+import java.awt.GraphicsDevice;
+import java.awt.GraphicsEnvironment;
 import java.awt.dnd.DnDConstants;
 import java.awt.dnd.DropTarget;
 import java.awt.event.ActionEvent;
@@ -22,39 +16,80 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.File;
 import java.io.FileInputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.Timer;
 import java.util.TimerTask;
+
+import javax.swing.AbstractAction;
+import javax.swing.Action;
+import javax.swing.Box;
+import javax.swing.ImageIcon;
+import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JFileChooser;
+import javax.swing.JFrame;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
+import javax.swing.JToggleButton;
+import javax.swing.JToolBar;
+import javax.swing.JTree;
+import javax.swing.ProgressMonitor;
+import javax.swing.SwingUtilities;
+import javax.swing.WindowConstants;
+import javax.swing.event.MenuEvent;
+import javax.swing.event.MenuListener;
+import javax.swing.event.TreeExpansionEvent;
+import javax.swing.event.TreeWillExpandListener;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeCellRenderer;
+import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreeNode;
+import javax.swing.tree.TreePath;
+import javax.swing.tree.TreeSelectionModel;
 
 import org.fife.ui.rsyntaxtextarea.Theme;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import jadx.api.JadxArgs;
 import jadx.api.ResourceFile;
 import jadx.gui.JadxWrapper;
 import jadx.gui.jobs.BackgroundWorker;
 import jadx.gui.jobs.DecompileJob;
 import jadx.gui.jobs.IndexJob;
+import jadx.gui.settings.JadxProject;
 import jadx.gui.settings.JadxSettings;
 import jadx.gui.settings.JadxSettingsWindow;
+import jadx.gui.treemodel.ApkSignature;
 import jadx.gui.treemodel.JCertificate;
 import jadx.gui.treemodel.JClass;
 import jadx.gui.treemodel.JLoadableNode;
 import jadx.gui.treemodel.JNode;
+import jadx.gui.treemodel.JPackage;
 import jadx.gui.treemodel.JResource;
 import jadx.gui.treemodel.JRoot;
 import jadx.gui.update.JadxUpdate;
 import jadx.gui.update.JadxUpdate.IUpdateCallback;
 import jadx.gui.update.data.Release;
 import jadx.gui.utils.CacheObject;
+import jadx.gui.utils.JumpPosition;
 import jadx.gui.utils.Link;
 import jadx.gui.utils.NLS;
-import jadx.gui.utils.JumpPosition;
 import jadx.gui.utils.Utils;
-
-import static javax.swing.KeyStroke.getKeyStroke;
 
 @SuppressWarnings("serial")
 public class MainWindow extends JFrame {
@@ -79,10 +114,14 @@ public class MainWindow extends JFrame {
 	private static final ImageIcon ICON_PREF = Utils.openIcon("wrench");
 	private static final ImageIcon ICON_DEOBF = Utils.openIcon("lock_edit");
 	private static final ImageIcon ICON_LOG = Utils.openIcon("report");
+	private static final ImageIcon ICON_JADX = Utils.openIcon("jadx-logo");
 
 	private final transient JadxWrapper wrapper;
 	private final transient JadxSettings settings;
 	private final transient CacheObject cacheObject;
+	private transient JadxProject project;
+	private transient Action newProjectAction;
+	private transient Action saveProjectAction;
 
 	private JPanel mainPanel;
 
@@ -95,7 +134,6 @@ public class MainWindow extends JFrame {
 	private boolean isFlattenPackage;
 	private JToggleButton flatPkgButton;
 	private JCheckBoxMenuItem flatPkgMenuItem;
-	private JCheckBoxMenuItem heapUsageBarMenuItem;
 
 	private JToggleButton deobfToggleBtn;
 	private JCheckBoxMenuItem deobfMenuItem;
@@ -111,30 +149,33 @@ public class MainWindow extends JFrame {
 		this.cacheObject = new CacheObject();
 
 		resetCache();
+		registerBundledFonts();
 		initUI();
 		initMenuAndToolbar();
-		applySettings();
-		checkForUpdate();
-	}
-
-	private void applySettings() {
-		setFont(settings.getFont());
-		setEditorTheme(settings.getEditorThemePath());
+		Utils.setWindowIcons(this);
 		loadSettings();
+		checkForUpdate();
+		newProject();
 	}
 
-	public void open() {
+	public void init() {
 		pack();
 		setLocationAndPosition();
 		heapUsageBar.setVisible(settings.isShowHeapUsageBar());
 		setVisible(true);
 		setLocationRelativeTo(null);
-		setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+		setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+		addWindowListener(new WindowAdapter() {
+			@Override
+			public void windowClosing(WindowEvent e) {
+				closeWindow();
+			}
+		});
 
 		if (settings.getFiles().isEmpty()) {
-			openFile();
+			openFileOrProject();
 		} else {
-			openFile(new File(settings.getFiles().get(0)));
+			open(Paths.get(settings.getFiles().get(0)));
 		}
 	}
 
@@ -145,44 +186,168 @@ public class MainWindow extends JFrame {
 		JadxUpdate.check(new IUpdateCallback() {
 			@Override
 			public void onUpdate(final Release r) {
-				SwingUtilities.invokeLater(new Runnable() {
-					@Override
-					public void run() {
-						updateLink.setText(String.format(NLS.str("menu.update_label"), r.getName()));
-						updateLink.setVisible(true);
-					}
+				SwingUtilities.invokeLater(() -> {
+					updateLink.setText(NLS.str("menu.update_label", r.getName()));
+					updateLink.setVisible(true);
 				});
 			}
 		});
 	}
 
-	public void openFile() {
+	public void openFileOrProject() {
 		JFileChooser fileChooser = new JFileChooser();
 		fileChooser.setAcceptAllFileFilterUsed(true);
-		String[] exts = {"apk", "dex", "jar", "class", "zip", "aar", "arsc"};
+		String[] exts = {JadxProject.PROJECT_EXTENSION, "apk", "dex", "jar", "class", "zip", "aar", "arsc", "smali"};
 		String description = "supported files: " + Arrays.toString(exts).replace('[', '(').replace(']', ')');
 		fileChooser.setFileFilter(new FileNameExtensionFilter(description, exts));
 		fileChooser.setToolTipText(NLS.str("file.open_action"));
-		String currentDirectory = settings.getLastOpenFilePath();
-		if (!currentDirectory.isEmpty()) {
-			fileChooser.setCurrentDirectory(new File(currentDirectory));
+		Path currentDirectory = settings.getLastOpenFilePath();
+		if (currentDirectory != null) {
+			fileChooser.setCurrentDirectory(currentDirectory.toFile());
 		}
 		int ret = fileChooser.showDialog(mainPanel, NLS.str("file.open_title"));
 		if (ret == JFileChooser.APPROVE_OPTION) {
-			settings.setLastOpenFilePath(fileChooser.getCurrentDirectory().getPath());
-			openFile(fileChooser.getSelectedFile());
+			settings.setLastOpenFilePath(fileChooser.getCurrentDirectory().toPath());
+			open(fileChooser.getSelectedFile().toPath());
 		}
 	}
 
-	public void openFile(File file) {
+	private void newProject() {
+		if (!ensureProjectIsSaved()) {
+			return;
+		}
+		project = new JadxProject(settings);
+		update();
+		clearTree();
+	}
+
+	private void clearTree() {
 		tabbedPane.closeAllTabs();
 		resetCache();
-		wrapper.openFile(file);
-		deobfToggleBtn.setSelected(settings.isDeobfuscationOn());
-		settings.addRecentFile(file.getAbsolutePath());
-		initTree();
-		setTitle(DEFAULT_TITLE + " - " + file.getName());
-		runBackgroundJobs();
+		treeRoot = null;
+		treeModel.setRoot(treeRoot);
+		treeModel.reload();
+	}
+
+	private void saveProject() {
+		if (project.getProjectPath() == null) {
+			saveProjectAs();
+		}
+		else {
+			project.save();
+			update();
+		}
+	}
+
+	private void saveProjectAs() {
+		JFileChooser fileChooser = new JFileChooser();
+		fileChooser.setAcceptAllFileFilterUsed(true);
+		String[] exts = {JadxProject.PROJECT_EXTENSION};
+		String description = "supported files: " + Arrays.toString(exts).replace('[', '(').replace(']', ')');
+		fileChooser.setFileFilter(new FileNameExtensionFilter(description, exts));
+		fileChooser.setToolTipText(NLS.str("file.save_project"));
+		Path currentDirectory = settings.getLastSaveProjectPath();
+		if (currentDirectory != null) {
+			fileChooser.setCurrentDirectory(currentDirectory.toFile());
+		}
+		int ret = fileChooser.showSaveDialog(mainPanel);
+		if (ret == JFileChooser.APPROVE_OPTION) {
+			settings.setLastSaveProjectPath(fileChooser.getCurrentDirectory().toPath());
+
+			Path path = fileChooser.getSelectedFile().toPath();
+			if (!path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(JadxProject.PROJECT_EXTENSION)) {
+				path = path.resolveSibling(path.getFileName() + "." + JadxProject.PROJECT_EXTENSION);
+			}
+
+			if (Files.exists(path)) {
+				int res = JOptionPane.showConfirmDialog(
+						this,
+						NLS.str("confirm.save_as_message", path.getFileName()),
+						NLS.str("confirm.save_as_title"),
+						JOptionPane.YES_NO_OPTION);
+				if (res == JOptionPane.NO_OPTION) {
+					return;
+				}
+			}
+			project.saveAs(path);
+			update();
+		}
+	}
+
+	void open(Path path) {
+		if (path.getFileName().toString().toLowerCase(Locale.ROOT)
+				.endsWith(JadxProject.PROJECT_EXTENSION)) {
+			openProject(path);
+		}
+		else {
+			project.setFilePath(path);
+			tabbedPane.closeAllTabs();
+			resetCache();
+			wrapper.openFile(path.toFile());
+			deobfToggleBtn.setSelected(settings.isDeobfuscationOn());
+			initTree();
+			update();
+			runBackgroundJobs();
+		}
+	}
+
+	private boolean ensureProjectIsSaved() {
+		if (project != null && !project.isSaved() && !project.isInitial()) {
+			int res = JOptionPane.showConfirmDialog(
+					this,
+					NLS.str("confirm.not_saved_message"),
+					NLS.str("confirm.not_saved_title"),
+					JOptionPane.YES_NO_CANCEL_OPTION);
+			if (res == JOptionPane.CANCEL_OPTION) {
+				return false;
+			}
+			if (res == JOptionPane.YES_OPTION) {
+				project.save();
+			}
+		}
+		return true;
+	}
+
+	private void openProject(Path path) {
+		if (!ensureProjectIsSaved()) {
+			return;
+		}
+		project = JadxProject.from(path, settings);
+		if (project == null) {
+			JOptionPane.showMessageDialog(
+					this,
+					NLS.str("msg.project_error"),
+					NLS.str("msg.project_error_title"),
+					JOptionPane.INFORMATION_MESSAGE
+			);
+			return;
+		}
+		update();
+		settings.addRecentProject(path);
+		Path filePath = project.getFilePath();
+		if (filePath == null) {
+			clearTree();
+		}
+		else {
+			open(filePath);
+		}
+	}
+
+	private void update() {
+		newProjectAction.setEnabled(!project.isInitial());
+		saveProjectAction.setEnabled(!project.isSaved());
+
+		Path projectPath = project.getProjectPath();
+		String pathString;
+		if (projectPath == null) {
+			pathString = "";
+		}
+		else {
+			pathString = " [" + projectPath.getParent().toAbsolutePath() + ']';
+		}
+		setTitle((project.isSaved() ? "" : '*')
+				+ project.getName() + pathString + " - " + DEFAULT_TITLE);
+
 	}
 
 	protected void resetCache() {
@@ -217,29 +382,41 @@ public class MainWindow extends JFrame {
 	public void reOpenFile() {
 		File openedFile = wrapper.getOpenFile();
 		if (openedFile != null) {
-			openFile(openedFile);
+			open(openedFile.toPath());
 		}
 	}
 
 	private void saveAll(boolean export) {
-		settings.setExportAsGradleProject(export);
-		if (export) {
-			settings.setSkipSources(false);
-			settings.setSkipResources(false);
+		JadxArgs decompilerArgs = wrapper.getArgs();
+		if ((!decompilerArgs.isFsCaseSensitive() && !decompilerArgs.isRenameCaseSensitive())
+				|| !decompilerArgs.isRenameValid() || !decompilerArgs.isRenamePrintable()) {
+			JOptionPane.showMessageDialog(
+					this,
+					NLS.str("msg.rename_disabled", settings.getLangLocale()),
+					NLS.str("msg.rename_disabled_title", settings.getLangLocale()),
+					JOptionPane.INFORMATION_MESSAGE
+			);
 		}
-
 		JFileChooser fileChooser = new JFileChooser();
 		fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
 		fileChooser.setToolTipText(NLS.str("file.save_all_msg"));
 
-		String currentDirectory = settings.getLastSaveFilePath();
-		if (!currentDirectory.isEmpty()) {
-			fileChooser.setCurrentDirectory(new File(currentDirectory));
+		Path currentDirectory = settings.getLastSaveFilePath();
+		if (currentDirectory != null) {
+			fileChooser.setCurrentDirectory(currentDirectory.toFile());
 		}
 
-		int ret = fileChooser.showDialog(mainPanel, NLS.str("file.select"));
+		int ret = fileChooser.showSaveDialog(mainPanel);
 		if (ret == JFileChooser.APPROVE_OPTION) {
-			settings.setLastSaveFilePath(fileChooser.getCurrentDirectory().getPath());
+			decompilerArgs.setExportAsGradleProject(export);
+			if (export) {
+				decompilerArgs.setSkipSources(false);
+				decompilerArgs.setSkipResources(false);
+			} else {
+				decompilerArgs.setSkipSources(settings.isSkipSources());
+				decompilerArgs.setSkipResources(settings.isSkipResources());
+			}
+			settings.setLastSaveFilePath(fileChooser.getCurrentDirectory().toPath());
 			ProgressMonitor progressMonitor = new ProgressMonitor(mainPanel, NLS.str("msg.saving_sources"), "", 0, 100);
 			progressMonitor.setMillisToPopup(0);
 			wrapper.saveAll(fileChooser.getSelectedFile(), progressMonitor);
@@ -290,15 +467,17 @@ public class MainWindow extends JFrame {
 	private void treeClickAction() {
 		try {
 			Object obj = tree.getLastSelectedPathComponent();
+			if (obj == null) {
+				return;
+			}
 			if (obj instanceof JResource) {
 				JResource res = (JResource) obj;
 				ResourceFile resFile = res.getResFile();
 				if (resFile != null && JResource.isSupportedForView(resFile.getType())) {
 					tabbedPane.showResource(res);
 				}
-			} else if (obj instanceof JCertificate) {
-				JCertificate cert = (JCertificate) obj;
-				tabbedPane.showCertificate(cert);
+			} else if ((obj instanceof JCertificate) || (obj instanceof ApkSignature)) {
+				tabbedPane.showSimpleNode((JNode) obj);
 			} else if (obj instanceof JNode) {
 				JNode node = (JNode) obj;
 				JClass cls = node.getRootClass();
@@ -308,6 +487,14 @@ public class MainWindow extends JFrame {
 			}
 		} catch (Exception e) {
 			LOG.error("Content loading error", e);
+		}
+	}
+
+	private void treeRightClickAction(MouseEvent e) {
+		Object obj = tree.getLastSelectedPathComponent();
+		if (obj instanceof JPackage) {
+			JPackagePopUp menu = new JPackagePopUp((JPackage) obj);
+			menu.show(e.getComponent(), e.getX(), e.getY());
 		}
 	}
 
@@ -340,11 +527,35 @@ public class MainWindow extends JFrame {
 		Action openAction = new AbstractAction(NLS.str("file.open_action"), ICON_OPEN) {
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				openFile();
+				openFileOrProject();
 			}
 		};
 		openAction.putValue(Action.SHORT_DESCRIPTION, NLS.str("file.open_action"));
 		openAction.putValue(Action.ACCELERATOR_KEY, getKeyStroke(KeyEvent.VK_O, KeyEvent.CTRL_DOWN_MASK));
+
+		newProjectAction = new AbstractAction(NLS.str("file.new_project")) {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				newProject();
+			}
+		};
+		newProjectAction.putValue(Action.SHORT_DESCRIPTION, NLS.str("file.new_project"));
+
+		saveProjectAction = new AbstractAction(NLS.str("file.save_project")) {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				saveProject();
+			}
+		};
+		saveProjectAction.putValue(Action.SHORT_DESCRIPTION, NLS.str("file.save_project"));
+
+		Action saveProjectAsAction = new AbstractAction(NLS.str("file.save_project_as")) {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				saveProjectAs();
+			}
+		};
+		saveProjectAsAction.putValue(Action.SHORT_DESCRIPTION, NLS.str("file.save_project_as"));
 
 		Action saveAllAction = new AbstractAction(NLS.str("file.save_all"), ICON_SAVE_ALL) {
 			@Override
@@ -364,8 +575,8 @@ public class MainWindow extends JFrame {
 		exportAction.putValue(Action.SHORT_DESCRIPTION, NLS.str("file.export_gradle"));
 		exportAction.putValue(Action.ACCELERATOR_KEY, getKeyStroke(KeyEvent.VK_E, KeyEvent.CTRL_DOWN_MASK));
 
-		JMenu recentFiles = new JMenu(NLS.str("menu.recent_files"));
-		recentFiles.addMenuListener(new RecentFilesMenuListener(recentFiles));
+		JMenu recentProjects = new JMenu(NLS.str("menu.recent_projects"));
+		recentProjects.addMenuListener(new RecentProjectsMenuListener(recentProjects));
 
 		Action prefsAction = new AbstractAction(NLS.str("menu.preferences"), ICON_PREF) {
 			@Override
@@ -388,7 +599,7 @@ public class MainWindow extends JFrame {
 		flatPkgMenuItem = new JCheckBoxMenuItem(NLS.str("menu.flatten"), ICON_FLAT_PKG);
 		flatPkgMenuItem.setState(isFlattenPackage);
 
-		heapUsageBarMenuItem = new JCheckBoxMenuItem(NLS.str("menu.heapUsageBar"));
+		JCheckBoxMenuItem heapUsageBarMenuItem = new JCheckBoxMenuItem(NLS.str("menu.heapUsageBar"));
 		heapUsageBarMenuItem.setState(settings.isShowHeapUsageBar());
 		heapUsageBarMenuItem.addActionListener(event -> {
 			settings.setShowHeapUsageBar(!settings.isShowHeapUsageBar());
@@ -450,7 +661,7 @@ public class MainWindow extends JFrame {
 		logAction.putValue(Action.ACCELERATOR_KEY, getKeyStroke(KeyEvent.VK_L,
 				KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK));
 
-		Action aboutAction = new AbstractAction(NLS.str("menu.about")) {
+		Action aboutAction = new AbstractAction(NLS.str("menu.about"), ICON_JADX) {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				new AboutDialog().setVisible(true);
@@ -480,10 +691,15 @@ public class MainWindow extends JFrame {
 		JMenu file = new JMenu(NLS.str("menu.file"));
 		file.setMnemonic(KeyEvent.VK_F);
 		file.add(openAction);
+		file.addSeparator();
+		file.add(newProjectAction);
+		file.add(saveProjectAction);
+		file.add(saveProjectAsAction);
+		file.addSeparator();
 		file.add(saveAllAction);
 		file.add(exportAction);
 		file.addSeparator();
-		file.add(recentFiles);
+		file.add(recentProjects);
 		file.addSeparator();
 		file.add(prefsAction);
 		file.addSeparator();
@@ -570,7 +786,11 @@ public class MainWindow extends JFrame {
 		tree.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mouseClicked(MouseEvent e) {
-				treeClickAction();
+				if (SwingUtilities.isRightMouseButton(e)) {
+					treeRightClickAction(e);
+				} else {
+					treeClickAction();
+				}
 			}
 		});
 		tree.addKeyListener(new KeyAdapter() {
@@ -590,12 +810,15 @@ public class MainWindow extends JFrame {
 				if (value instanceof JNode) {
 					setIcon(((JNode) value).getIcon());
 				}
+				if (value instanceof JPackage) {
+					setEnabled(((JPackage) value).isEnabled());
+				}
 				return c;
 			}
 		});
 		tree.addTreeWillExpandListener(new TreeWillExpandListener() {
 			@Override
-			public void treeWillExpand(TreeExpansionEvent event) throws ExpandVetoException {
+			public void treeWillExpand(TreeExpansionEvent event) {
 				TreePath path = event.getPath();
 				Object node = path.getLastPathComponent();
 				if (node instanceof JLoadableNode) {
@@ -604,7 +827,8 @@ public class MainWindow extends JFrame {
 			}
 
 			@Override
-			public void treeWillCollapse(TreeExpansionEvent event) throws ExpandVetoException {
+			public void treeWillCollapse(TreeExpansionEvent event) {
+				// ignore
 			}
 		});
 
@@ -639,11 +863,14 @@ public class MainWindow extends JFrame {
 		setSize((int) (w * WINDOW_RATIO), (int) (h * WINDOW_RATIO));
 	}
 
-	public void updateFont(Font font) {
-		setFont(font);
+	public static void registerBundledFonts() {
+		GraphicsEnvironment grEnv = GraphicsEnvironment.getLocalGraphicsEnvironment();
+		if (Utils.FONT_HACK != null) {
+			grEnv.registerFont(Utils.FONT_HACK);
+		}
 	}
 
-	public void setEditorTheme(String editorThemePath) {
+	private void setEditorTheme(String editorThemePath) {
 		try {
 			editorTheme = Theme.load(getClass().getResourceAsStream(editorThemePath));
 		} catch (Exception e) {
@@ -661,14 +888,24 @@ public class MainWindow extends JFrame {
 	}
 
 	public void loadSettings() {
+		Font font = settings.getFont();
+		Font largerFont = font.deriveFont(font.getSize() + 2.f);
+
+		setFont(largerFont);
+		setEditorTheme(settings.getEditorThemePath());
+		tree.setFont(largerFont);
+		tree.setRowHeight(-1);
+
 		tabbedPane.loadSettings();
 	}
 
-	@Override
-	public void dispose() {
+	private void closeWindow() {
+		if (!ensureProjectIsSaved()) {
+			return;
+		}
 		settings.saveWindowPos(this);
 		cancelBackgroundJobs();
-		super.dispose();
+		dispose();
 	}
 
 	public JadxWrapper getWrapper() {
@@ -691,28 +928,27 @@ public class MainWindow extends JFrame {
 		return backgroundWorker;
 	}
 
-	private class RecentFilesMenuListener implements MenuListener {
-		private final JMenu recentFiles;
+	private class RecentProjectsMenuListener implements MenuListener {
+		private final JMenu recentProjects;
 
-		public RecentFilesMenuListener(JMenu recentFiles) {
-			this.recentFiles = recentFiles;
+		public RecentProjectsMenuListener(JMenu recentProjects) {
+			this.recentProjects = recentProjects;
 		}
 
 		@Override
 		public void menuSelected(MenuEvent menuEvent) {
-			recentFiles.removeAll();
+			recentProjects.removeAll();
 			File openFile = wrapper.getOpenFile();
-			String currentFile = openFile == null ? "" : openFile.getAbsolutePath();
-			for (final String file : settings.getRecentFiles()) {
-				if (file.equals(currentFile)) {
-					continue;
+			Path currentPath = openFile == null ? null : openFile.toPath();
+			for (final Path path : settings.getRecentProjects()) {
+				if (!path.equals(currentPath)) {
+					JMenuItem menuItem = new JMenuItem(path.toAbsolutePath().toString());
+					recentProjects.add(menuItem);
+					menuItem.addActionListener(e -> open(path));
 				}
-				JMenuItem menuItem = new JMenuItem(file);
-				recentFiles.add(menuItem);
-				menuItem.addActionListener(e -> openFile(new File(file)));
 			}
-			if (recentFiles.getItemCount() == 0) {
-				recentFiles.add(new JMenuItem(NLS.str("menu.no_recent_files")));
+			if (recentProjects.getItemCount() == 0) {
+				recentProjects.add(new JMenuItem(NLS.str("menu.no_recent_projects")));
 			}
 		}
 
@@ -722,6 +958,24 @@ public class MainWindow extends JFrame {
 
 		@Override
 		public void menuCanceled(MenuEvent e) {
+		}
+	}
+
+	private class JPackagePopUp extends JPopupMenu {
+		JMenuItem excludeItem = new JCheckBoxMenuItem(NLS.str("popup.exclude"));
+
+		public JPackagePopUp(JPackage pkg) {
+			excludeItem.setSelected(!pkg.isEnabled());
+			add(excludeItem);
+			excludeItem.addItemListener(e -> {
+				String fullName = pkg.getFullName();
+				if (excludeItem.isSelected()) {
+					wrapper.addExcludedPackage(fullName);
+				} else {
+					wrapper.removeExcludedPackage(fullName);
+				}
+				reOpenFile();
+			});
 		}
 	}
 }

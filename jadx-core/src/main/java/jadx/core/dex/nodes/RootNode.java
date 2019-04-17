@@ -18,10 +18,10 @@ import jadx.core.dex.info.ConstStorage;
 import jadx.core.dex.info.FieldInfo;
 import jadx.core.dex.info.InfoStorage;
 import jadx.core.dex.info.MethodInfo;
+import jadx.core.dex.visitors.typeinference.TypeUpdate;
 import jadx.core.utils.ErrorsCounter;
 import jadx.core.utils.StringUtils;
 import jadx.core.utils.android.AndroidResourcesUtils;
-import jadx.core.utils.exceptions.JadxException;
 import jadx.core.utils.exceptions.JadxRuntimeException;
 import jadx.core.utils.files.DexFile;
 import jadx.core.utils.files.InputFile;
@@ -36,6 +36,7 @@ public class RootNode {
 	private final StringUtils stringUtils;
 	private final ConstStorage constValues;
 	private final InfoStorage infoStorage = new InfoStorage();
+	private final TypeUpdate typeUpdate;
 
 	private ClspGraph clsp;
 	private List<DexNode> dexNodes;
@@ -48,6 +49,7 @@ public class RootNode {
 		this.args = args;
 		this.stringUtils = new StringUtils(args);
 		this.constValues = new ConstStorage(args);
+		this.typeUpdate = new TypeUpdate(this);
 	}
 
 	public void load(List<InputFile> inputFiles) {
@@ -81,17 +83,16 @@ public class RootNode {
 			LOG.debug("'.arsc' file not found");
 			return;
 		}
-		ResTableParser parser = new ResTableParser();
 		try {
-			ResourcesLoader.decodeStream(arsc, (size, is) -> {
+			ResourceStorage resStorage = ResourcesLoader.decodeStream(arsc, (size, is) -> {
+				ResTableParser parser = new ResTableParser();
 				parser.decode(is);
-				return null;
+				return parser.getResStorage();
 			});
-		} catch (JadxException e) {
+			processResources(resStorage);
+		} catch (Exception e) {
 			LOG.error("Failed to parse '.arsc' file", e);
-			return;
 		}
-		processResources(parser.getResStorage());
 	}
 
 	public void processResources(ResourceStorage resStorage) {
@@ -223,5 +224,9 @@ public class RootNode {
 
 	public JadxArgs getArgs() {
 		return args;
+	}
+
+	public TypeUpdate getTypeUpdate() {
+		return typeUpdate;
 	}
 }

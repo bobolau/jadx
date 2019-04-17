@@ -1,17 +1,20 @@
 package jadx.gui.settings;
 
 import java.lang.reflect.Modifier;
+import java.nio.file.Path;
 import java.util.prefs.Preferences;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.InstanceCreator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import jadx.gui.JadxGUI;
+import jadx.gui.utils.PathTypeAdapter;
 
 public class JadxSettingsAdapter {
 
@@ -21,7 +24,7 @@ public class JadxSettingsAdapter {
 
 	private static final Preferences PREFS = Preferences.userNodeForPackage(JadxGUI.class);
 
-	private static ExclusionStrategy EXCLUDE_FIELDS = new ExclusionStrategy() {
+	private static final ExclusionStrategy EXCLUDE_FIELDS = new ExclusionStrategy() {
 		@Override
 		public boolean shouldSkipField(FieldAttributes f) {
 			return JadxSettings.SKIP_FIELDS.contains(f.getName())
@@ -34,7 +37,10 @@ public class JadxSettingsAdapter {
 			return false;
 		}
 	};
-	private static final GsonBuilder GSON_BUILDER = new GsonBuilder().setExclusionStrategies(EXCLUDE_FIELDS);
+	private static final GsonBuilder GSON_BUILDER = new GsonBuilder()
+			.setExclusionStrategies(EXCLUDE_FIELDS)
+			.registerTypeHierarchyAdapter(Path.class, PathTypeAdapter.singleton())
+			;
 	private static final Gson GSON = GSON_BUILDER.create();
 
 	private JadxSettingsAdapter() {

@@ -1,19 +1,21 @@
 package jadx.tests.integration.inner;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
+import jadx.NotYetImplemented;
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
 import static org.hamcrest.CoreMatchers.containsString;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.not;
 
 public class TestAnonymousClass3 extends IntegrationTest {
 
 	public static class TestCls {
 		public static class Inner {
 			private int f;
-			private double d;
+			public double d;
 
 			public void test() {
 				new Thread() {
@@ -47,9 +49,17 @@ public class TestAnonymousClass3 extends IntegrationTest {
 		assertThat(code, containsString(indent(4) + "public void run() {"));
 		assertThat(code, containsString(indent(3) + "}.start();"));
 
-//		assertThat(code, not(containsString("synthetic")));
-//		assertThat(code, not(containsString("AnonymousClass_")));
+		assertThat(code, not(containsString("AnonymousClass_")));
+	}
 
-//		assertThat(code, containsString("a = f--;"));
+	@Test
+	@NotYetImplemented
+	public void test2() {
+		disableCompilation();
+		ClassNode cls = getClassNode(TestCls.class);
+		String code = cls.getCode().toString();
+
+		assertThat(code, not(containsString("synthetic")));
+		assertThat(code, containsString("a = f--;"));
 	}
 }

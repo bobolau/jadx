@@ -2,19 +2,19 @@ package jadx.tests.integration.types;
 
 import java.io.IOException;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import jadx.core.dex.nodes.ClassNode;
 import jadx.tests.api.IntegrationTest;
 
 import static jadx.tests.api.utils.JadxMatchers.containsOne;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class TestTypeResolver2 extends IntegrationTest {
 
 	public static class TestCls {
 
-		private static boolean test(Object obj) throws IOException {
+		public static boolean test(Object obj) throws IOException {
 			if (obj != null) {
 				return true;
 			}

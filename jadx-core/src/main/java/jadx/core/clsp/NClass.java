@@ -7,7 +7,8 @@ public class NClass {
 
 	private final String name;
 	private NClass[] parents;
-	private int id;
+	private NMethod[] methods;
+	private final int id;
 
 	public NClass(String name, int id) {
 		this.name = name;
@@ -20,10 +21,6 @@ public class NClass {
 
 	public int getId() {
 		return id;
-	}
-
-	public void setId(int id) {
-		this.id = id;
 	}
 
 	public NClass[] getParents() {
@@ -54,5 +51,13 @@ public class NClass {
 	@Override
 	public String toString() {
 		return name;
+	}
+
+	public void setMethods(NMethod[] methods) {
+		this.methods = methods;
+	}
+
+	public NMethod[] getMethods() {
+		return methods;
 	}
 }
