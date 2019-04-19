@@ -532,6 +532,9 @@ public class InsnDecoder {
 
 			case Opcodes.INVOKE_DIRECT:
 				return invoke(insn, offset, InvokeType.DIRECT, false);
+			case Opcodes.INVOKE_CUSTOM:
+				LOG.warn("Unknown instruction: '" + OpcodeInfo.getName(insn.getOpcode()) + '\'');
+				return invoke(insn, offset, InvokeType.DIRECT, false);
 			case Opcodes.INVOKE_INTERFACE:
 				return invoke(insn, offset, InvokeType.INTERFACE, false);
 			case Opcodes.INVOKE_SUPER:
@@ -540,6 +543,9 @@ public class InsnDecoder {
 				return invoke(insn, offset, InvokeType.VIRTUAL, false);
 
 			case Opcodes.INVOKE_DIRECT_RANGE:
+				return invoke(insn, offset, InvokeType.DIRECT, true);
+			case Opcodes.INVOKE_CUSTOM_RANGE:
+				LOG.warn("Unknown instruction: '" + OpcodeInfo.getName(insn.getOpcode()) + '\'');
 				return invoke(insn, offset, InvokeType.DIRECT, true);
 			case Opcodes.INVOKE_INTERFACE_RANGE:
 				return invoke(insn, offset, InvokeType.INTERFACE, true);

@@ -12,6 +12,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
+import jadx.core.dex.instructions.IndexInsnNode;
+import jadx.core.dex.instructions.InsnType;
+import jadx.core.dex.nodes.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -25,10 +28,6 @@ import jadx.core.dex.info.ClassInfo;
 import jadx.core.dex.info.FieldInfo;
 import jadx.core.dex.info.MethodInfo;
 import jadx.core.dex.instructions.args.ArgType;
-import jadx.core.dex.nodes.ClassNode;
-import jadx.core.dex.nodes.DexNode;
-import jadx.core.dex.nodes.FieldNode;
-import jadx.core.dex.nodes.MethodNode;
 
 public class Deobfuscator {
 	private static final Logger LOG = LoggerFactory.getLogger(Deobfuscator.class);
@@ -53,6 +52,10 @@ public class Deobfuscator {
 	private final PackageNode rootPackage = new PackageNode("");
 	private final Set<String> pkgSet = new TreeSet<>();
 	private final Set<String> reservedClsNames = new HashSet<>();
+
+	// for load set method only
+	private final Set<ClassInfo> setLoadSetGetMethod = new HashSet<>();
+	private final Map<FieldInfo, MethodInfo> fieldSetGetMethodMap = new HashMap<>();
 
 	private final int maxLength;
 	private final int minLength;
@@ -80,10 +83,11 @@ public class Deobfuscator {
 	}
 
 	public void execute() {
-		if (!args.isDeobfuscationForceSave()) {
+		// fix, change to always load old
+		//if (!args.isDeobfuscationForceSave()) {
 			deobfPresets.load();
 			initIndexes();
-		}
+		//}
 		process();
 		deobfPresets.save(args.isDeobfuscationForceSave());
 		clear();
@@ -234,6 +238,7 @@ public class Deobfuscator {
 		if (!fullName.equals(clsInfo.getFullName())) {
 			clsInfo.rename(cls.dex().root(), fullName);
 		}
+
 		for (FieldNode field : cls.getFields()) {
 			if (field.contains(AFlag.DONT_RENAME)) {
 				continue;
@@ -453,10 +458,99 @@ public class Deobfuscator {
 	}
 
 	public String makeFieldAlias(FieldNode field) {
-		String alias = String.format("f%d%s", fldIndex++, prepareNamePart(field.getName()));
+		// 1. try to get field name via set method name
+		String alias = getAliasBySetGetMethod(field.getParentClass(), field);
+
+		// 2. try to get field name by field type
+		if(alias==null ){
+			alias = getAliasByFieldType(field);
+		}
+		if(alias==null){
+			alias = String.format("f%d%s", fldIndex++, prepareNamePart(field.getName()));
+		}
 		fldMap.put(field.getFieldInfo(), alias);
 		return alias;
 	}
+
+	private String getAliasByFieldType(FieldNode field){
+		// 检查字段类型，如果不为String和Array/List/Set集合类，则检查该类型的字段数量，数量为1则直接用类型来命名字段
+		String alias = null;
+		// final or static field,  String
+		if((field.getAccessFlags().isFinal() || field.getAccessFlags().isStatic() )&& field.getType().isObject()){
+			if("java.lang.String".equals(field.getType().getObject()) && field.getAttributesStringsList().size()>0){
+				//V=xxx
+				alias = field.getAttributesStringsList().get(0).substring(2);//.toUpperCase();
+				if(alias.length()<=2){
+					alias = "fld_" + alias;
+				}
+				return alias;
+			}
+		}
+		if(!field.getType().isPrimitive() && field.getType().isObject()){
+			String type = field.getType().getObject();
+			int startIndex = type.lastIndexOf(".")+1;
+			// when start with "I", then next char. such as IItemObject (ascii I=73)
+			if(type.charAt(startIndex)==73){
+				startIndex += 1;
+			}
+			alias = new StringBuilder().append(Character.toLowerCase(type.charAt(startIndex))).append(type.substring(startIndex+1)).toString();
+
+		}
+		return alias;
+	}
+
+	private String getAliasBySetGetMethod(ClassNode cls, FieldNode field){
+		String alias = null;
+		if(!setLoadSetGetMethod.contains(cls.getClassInfo())){
+			for (MethodNode mth : cls.getMethods()) {
+				try {
+					// ignore non get/set method
+					if(!mth.getName().startsWith("set") && !mth.getName().startsWith("get") ){
+						continue;
+					}
+					// load set method
+					mth.load();
+					// check mapping field
+					InsnNode[] insnNodes = mth.getInstructions();
+					if(insnNodes!=null){
+						for(int i=0; i<insnNodes.length && i<3; i++){
+							if(insnNodes[i]==null){ continue;}
+							if(mth.getName().startsWith("set")){
+								if(InsnType.IPUT.equals(insnNodes[i].getType()) && insnNodes[i] instanceof IndexInsnNode){
+									Object indexObject = ((IndexInsnNode)insnNodes[i]).getIndex();
+									if(indexObject instanceof FieldInfo){
+										fieldSetGetMethodMap.put((FieldInfo)indexObject, mth.getMethodInfo());
+										break;
+									}
+								}
+							}else{  //get
+								if(insnNodes[i] instanceof IndexInsnNode){
+									Object indexObject = ((IndexInsnNode)insnNodes[i]).getIndex();
+									if(indexObject instanceof FieldInfo && !fieldSetGetMethodMap.containsKey((FieldInfo)indexObject)){
+										fieldSetGetMethodMap.put((FieldInfo)indexObject, mth.getMethodInfo());
+										break;
+									}
+								}
+							}
+						}
+					}
+				} catch (Exception e) {
+					mth.addError("Method load error", e);
+				}
+			}
+			setLoadSetGetMethod.add(cls.getClassInfo());
+		}
+
+		if(fieldSetGetMethodMap.containsKey(field.getFieldInfo())){
+			MethodInfo method = fieldSetGetMethodMap.get(field.getFieldInfo());
+			if(!method.isRenamed()){
+				// setFieldName/getFieldName
+				alias = new StringBuilder().append(Character.toLowerCase(method.getName().charAt(3))).append(method.getName().substring(4)).toString();
+			}
+		}
+		return alias;
+	}
+
 
 	public String makeMethodAlias(MethodNode mth) {
 		String alias = String.format("m%d%s", mthIndex++, prepareNamePart(mth.getName()));
@@ -487,6 +581,9 @@ public class Deobfuscator {
 	}
 
 	private boolean shouldRename(String s) {
+		if("id".equals(s)){
+			return false;
+		}
 		int len = s.length();
 		return len < minLength || len > maxLength
 				|| !NameMapper.isValidIdentifier(s);

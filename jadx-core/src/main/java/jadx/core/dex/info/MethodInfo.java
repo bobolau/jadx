@@ -20,6 +20,7 @@ public final class MethodInfo {
 	private String alias;
 	private boolean aliasFromPreset;
 
+
 	private MethodInfo(DexNode dex, int mthIndex) {
 		MethodId mthId = dex.getMethodId(mthIndex);
 		name = dex.getString(mthId.getNameIndex());
