@@ -476,8 +476,11 @@ public class Deobfuscator {
 		// 检查字段类型，如果不为String和Array/List/Set集合类，则检查该类型的字段数量，数量为1则直接用类型来命名字段
 		String alias = null;
 		// final or static field,  String
-		if((field.getAccessFlags().isFinal() || field.getAccessFlags().isStatic() )&& field.getType().isObject()){
-			if("java.lang.String".equals(field.getType().getObject()) && field.getAttributesStringsList().size()>0){
+		if((field.getAccessFlags().isFinal() || field.getAccessFlags().isStatic() ) && field.getType().isObject()){
+			if("java.lang.String".equals(field.getType().getObject())
+					&& field.getAttributesStringsList().size()>0
+					&& field.getAttributesStringsList().get(0).indexOf("V=")>=0
+			){
 				//V=xxx
 				alias = field.getAttributesStringsList().get(0).substring(2);//.toUpperCase();
 				if(alias.length()<=2){
@@ -486,7 +489,8 @@ public class Deobfuscator {
 				return alias;
 			}
 		}
-		if(!field.getType().isPrimitive() && field.getType().isObject()){
+		if(!field.getType().isPrimitive() && field.getType().isObject()
+				&& !"java.lang.String".equals(field.getType().getObject())){
 			String type = field.getType().getObject();
 			int startIndex = type.lastIndexOf(".")+1;
 			// when start with "I", then next char. such as IItemObject (ascii I=73)
@@ -514,23 +518,29 @@ public class Deobfuscator {
 					InsnNode[] insnNodes = mth.getInstructions();
 					if(insnNodes!=null){
 						for(int i=0; i<insnNodes.length && i<3; i++){
-							if(insnNodes[i]==null){ continue;}
-							if(mth.getName().startsWith("set")){
-								if(InsnType.IPUT.equals(insnNodes[i].getType()) && insnNodes[i] instanceof IndexInsnNode){
-									Object indexObject = ((IndexInsnNode)insnNodes[i]).getIndex();
-									if(indexObject instanceof FieldInfo){
-										fieldSetGetMethodMap.put((FieldInfo)indexObject, mth.getMethodInfo());
-										break;
-									}
+							if(insnNodes[i]==null
+									|| !(insnNodes[i] instanceof IndexInsnNode)
+									|| !(((IndexInsnNode)insnNodes[i]).getIndex() instanceof FieldInfo)){
+								continue;
+							}
+							Object indexObject = ((IndexInsnNode)insnNodes[i]).getIndex();
+							// set method
+							if(mth.getName().startsWith("set")
+									&& InsnType.IPUT.equals(insnNodes[i].getType())){
+								fieldSetGetMethodMap.put((FieldInfo)indexObject, mth.getMethodInfo());
+								break;
+
+							}
+							// get method
+							if(mth.getName().startsWith("get")
+									&& mth.getReturnType().isObject()
+									&& ((FieldInfo)indexObject).getType().getObject().equals(mth.getReturnType().getObject())){
+								if(fieldSetGetMethodMap.containsKey((FieldInfo)indexObject)){
+									break;
 								}
-							}else{  //get
-								if(insnNodes[i] instanceof IndexInsnNode){
-									Object indexObject = ((IndexInsnNode)insnNodes[i]).getIndex();
-									if(indexObject instanceof FieldInfo && !fieldSetGetMethodMap.containsKey((FieldInfo)indexObject)){
-										fieldSetGetMethodMap.put((FieldInfo)indexObject, mth.getMethodInfo());
-										break;
-									}
-								}
+								fieldSetGetMethodMap.put((FieldInfo)indexObject, mth.getMethodInfo());
+								LOG.warn(mth.getMethodInfo()+" => " + (FieldInfo)indexObject);
+								break;
 							}
 						}
 					}
